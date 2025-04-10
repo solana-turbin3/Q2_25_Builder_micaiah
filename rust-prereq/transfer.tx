@@ -1,0 +1,13 @@
+addon "svm" {
+    rpc_api_url = "https://api.devnet.solana.com"
+}
+
+signer "dev_wallet" "svm::secret_key" {
+    keypair_json = "./dev-wallet.json"
+}
+
+action "transfer" "svm::send_sol" {
+    signer = signer.dev_wallet
+    recipient = "zbBjhHwuqyKMmz8ber5oUtJJ3ZV4B6ePmANfGyKzVGV"
+    amount = svm::sol_to_lamports(0.1)
+}

@@ -1,0 +1,57 @@
+addon "svm" {
+    rpc_api_url = "https://api.devnet.solana.com"
+    network_id = "devnet"
+}
+
+signer "wallet" "svm::web_wallet" {
+    expected_address = "zbBjhHwuqyKMmz8ber5oUtJJ3ZV4B6ePmANfGyKzVGV"
+}
+
+variable "data" {
+    value = svm::get_instruction_data_from_idl_path(
+        "idl.json", // idl path
+        "complete", // instruction
+        // ix args:
+        [
+            "MicaiahReid" // arg: Github username
+        ]
+    )
+}
+
+variable "program_id" {
+    value = "ADcaide4vBtKuyZQqdU689YqEGZMCmS4tL35bdTv9wJa"
+}
+
+variable "prereq_pda" {
+    value = svm::find_pda(
+        variable.program_id,
+        [ 
+            "prereq",
+            signer.wallet.address
+        ]
+    )
+}
+
+action "enroll" "svm::process_instructions" {
+    signers = [signer.wallet]
+    instruction {
+        program_id = variable.program_id
+        data = variable.data
+        account {
+            public_key = signer.wallet.address
+            is_writable = true
+            is_signer = true
+        }
+        account  {
+            public_key = variable.prereq_pda.pda
+            is_writable = true
+        }
+        account {
+            public_key = svm::system_program_id()
+        }
+    }
+}
+
+output "sig" {
+    value = "https://explorer.solana.com/tx/${action.enroll.signature}?cluster=devnet"
+}
