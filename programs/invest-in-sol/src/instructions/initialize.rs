@@ -7,6 +7,16 @@ use anchor_spl::{
 use crate::state::Config;
 use crate::state::Treasury;
 
+
+// What do we initialize: 
+//    - Tokens (Convertible note and protocol token)
+//    - NFT Collection
+//    - A vault pda
+//        - Holds: 
+//            - PT
+//            - Mint authority / Metadata authority for nfts
+
+
 #[derive(Accounts)]
 #[instruction(seed: u64)]
 pub struct Initialize<'info> {
@@ -20,20 +30,35 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = initializer,
-        associated_token::mint = cn_mint,
-        associated_token::authority = config
-    )]
-    pub cn_vault: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = initializer,
-        seeds = [b"lp", config.key().as_ref() ],
+        seeds = [b"cn", config.key().as_ref() ],
         bump,
         mint::decimals = 6,
         mint::authority = config
     )]
-    pub mint_lp: Account<'info, Mint>,
+    pub conv_note: Account<'info, TokenAccount>,
+
+    pub pt_mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = initializer,
+        seeds = [b"pt", config.key().as_ref() ],
+        bump,
+        mint::decimals = 6,
+        mint::authority = config
+    )]
+    pub protocol_token: Account<'info, Mint>,
+
+    // TODO: confirm this
+    pub collection_mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = initializer,
+        seeds = [b"pt", config.key().as_ref() ],
+        bump,
+        mint::decimals = 6,
+        mint::authority = config
+    )]
+    pub nft_collection: Account<'info, Mint>,
 
     #[account(
         init,
@@ -51,7 +76,7 @@ pub struct Initialize<'info> {
         bump,
         space = 8 + Treasury::INIT_SPACE
     )]
-    pub sol_treasury: Account<'info, Treasury>,
+    pub treasury: Account<'info, Treasury>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
 
@@ -70,11 +95,13 @@ impl<'info> Initialize<'info> {
             seed,
             authority,
             cn_mint: self.cn_mint.key(),
+            pt_mint: self.pt_mint.key(),
+            collection_mint: self.collection_mint.key(),
             fee: None,
             locked: false,
             config_bump: bumps.config,
-            lp_bump: bumps.mint_lp,
-            treasury_bump: bumps.sol_treasury,
+            pt_bump: bumps.protocol_token,
+            treasury_bump: bumps.treasury,
         };
 
         Ok(())
