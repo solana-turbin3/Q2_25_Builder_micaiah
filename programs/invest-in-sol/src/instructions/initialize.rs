@@ -17,26 +17,26 @@ use crate::state::Treasury;
 // What do we initialize:
 //    - Tokens (Convertible note and protocol token)
 //    - NFT Collection
-//    - A vault (config) pda
+//    - A vault (config) pda: user facing actions
 //        - Holds:
 //            - PT
 //            - Mint authority / Metadata authority for nfts
-//    - A treasury pda
+//    - A treasury pda: admin actions
 //        - Holds:
 //            - CN / PT token account references
 
-pub const PROTOCOL_NAME: &str = "Zephyr Haus";
-pub const PROTOCOL_SYMBOL: &str = "ZHS";
-pub const PROTOCOL_URI: &str = "https://zephyr.haus/metadata.json";
+pub const PROTOCOL_TOKEN_NAME: &str = "Zephyr Haus Protocol Token";
+pub const PROTOCOL_TOKEN_SYMBOL: &str = "zHAUS";
+pub const CONVERTIBLE_NOTE_NAME: &str = "Zephyr Haus Convertible Note";
+pub const CONVERTIBLE_NOTE_SYMBOL: &str = "zCN";
+pub const OPTIONS_NAME: &str = "Zephyr Haus Option NFT";
+pub const OPTIONS_SYMBOL: &str = "ZHS";
+pub const OPTIONS_URI: &str = "https://zephyr.haus/metadata.json";
 
 #[derive(Accounts)]
 pub struct Initialize<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
-
-    // todo: I think rather than this being just a `Mint`, we want it to be a _specific_ mint.
-    // it's a token that we've already created an know the address to. maybe it just needs to
-    // be another PDA generated in this initialize function?
 
     // ******************** Convertible Note Accounts ********************
     #[account(
@@ -55,6 +55,9 @@ pub struct Initialize<'info> {
         associated_token::authority = treasury,
     )]
     pub treasury_cn_token_account: Account<'info, TokenAccount>,
+    /// CHECK: Metaplex metadata account, created by `initialize_cn_metadata` function
+    #[account(mut)]
+    pub cn_metadata: UncheckedAccount<'info>,
 
     // ******************** Protocol Token Accounts ********************
     #[account(
@@ -80,6 +83,9 @@ pub struct Initialize<'info> {
         associated_token::authority = treasury,
     )]
     pub treasury_pt_token_account: Account<'info, TokenAccount>,
+    /// CHECK: Metaplex metadata account, created by `initialize_pt_metadata` function
+    #[account(mut)]
+    pub pt_metadata: UncheckedAccount<'info>,
 
     // ******************** NFT Option Accounts ********************
     #[account(
@@ -131,7 +137,9 @@ impl<'info> Initialize<'info> {
         &mut self,
         authority: Option<Pubkey>,
         bumps: InitializeBumps,
-        collection_meta_bump: u8,
+        cn_metadata_bump: u8,
+        pt_metadata_bump: u8,
+        collection_metadata_bump: u8,
         collection_master_edition_bump: u8,
     ) -> Result<()> {
         *self.config = Config {
@@ -145,7 +153,9 @@ impl<'info> Initialize<'info> {
             pt_bump: bumps.pt_mint,
             cn_bump: bumps.cn_mint,
             collection_mint_bump: bumps.collection_mint,
-            collection_meta_bump,
+            cn_metadata_bump,
+            pt_metadata_bump,
+            collection_metadata_bump,
             collection_master_edition_bump,
         };
 
@@ -155,6 +165,88 @@ impl<'info> Initialize<'info> {
         };
 
         Ok(())
+    }
+
+    pub fn initialize_cn_metadata(&mut self) -> Result<u8> {
+        let create_metadata_accounts = CreateMetadataAccountsV3 {
+            metadata: self.cn_metadata.to_account_info(),
+            mint_authority: self.config.to_account_info(),
+            payer: self.initializer.to_account_info(),
+            update_authority: self.config.to_account_info(),
+            system_program: self.system_program.to_account_info(),
+            mint: self.cn_mint.to_account_info(),
+            rent: self.rent.to_account_info(),
+        };
+
+        let cn_mint_pubkey = self.cn_mint.key();
+        let (_, cn_meta_bump) = TokenMetadataAccount::find_pda(&cn_mint_pubkey);
+        let cn_metadata_seeds = [
+            TokenMetadataAccount::PREFIX,
+            self.metadata_program.key.as_ref(),
+            cn_mint_pubkey.as_ref(),
+            &[cn_meta_bump],
+        ];
+        let cn_metadata_seeds = [&cn_metadata_seeds[..]];
+
+        let ctx = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            create_metadata_accounts,
+            &cn_metadata_seeds,
+        );
+
+        let data = DataV2 {
+            name: CONVERTIBLE_NOTE_NAME.to_string(),
+            symbol: CONVERTIBLE_NOTE_SYMBOL.to_string(),
+            uri: "".to_string(),
+            seller_fee_basis_points: 0,
+            creators: None,
+            collection: None,
+            uses: None,
+        };
+
+        let _ = create_metadata_accounts_v3(ctx, data, true, false, None)?;
+        Ok(cn_meta_bump)
+    }
+
+    pub fn initialize_pt_metadata(&mut self) -> Result<u8> {
+        let create_metadata_accounts = CreateMetadataAccountsV3 {
+            metadata: self.pt_metadata.to_account_info(),
+            mint_authority: self.config.to_account_info(),
+            payer: self.initializer.to_account_info(),
+            update_authority: self.config.to_account_info(),
+            system_program: self.system_program.to_account_info(),
+            mint: self.pt_mint.to_account_info(),
+            rent: self.rent.to_account_info(),
+        };
+
+        let pt_mint_pubkey = self.pt_mint.key();
+        let (_, pt_meta_bump) = TokenMetadataAccount::find_pda(&pt_mint_pubkey);
+        let pt_metadata_seeds = [
+            TokenMetadataAccount::PREFIX,
+            self.metadata_program.key.as_ref(),
+            pt_mint_pubkey.as_ref(),
+            &[pt_meta_bump],
+        ];
+        let pt_metadata_seeds = [&pt_metadata_seeds[..]];
+
+        let ctx = CpiContext::new_with_signer(
+            self.token_program.to_account_info(),
+            create_metadata_accounts,
+            &pt_metadata_seeds,
+        );
+
+        let data = DataV2 {
+            name: PROTOCOL_TOKEN_NAME.to_string(),
+            symbol: PROTOCOL_TOKEN_SYMBOL.to_string(),
+            uri: "".into(),
+            seller_fee_basis_points: 0,
+            creators: None,
+            collection: None,
+            uses: None,
+        };
+
+        let _ = create_metadata_accounts_v3(ctx, data, true, false, None)?;
+        Ok(pt_meta_bump)
     }
 
     pub fn initialize_nft_metadata(&mut self) -> Result<u8> {
@@ -185,9 +277,9 @@ impl<'info> Initialize<'info> {
         );
 
         let data = DataV2 {
-            name: PROTOCOL_NAME.to_string(),
-            symbol: PROTOCOL_SYMBOL.to_string(),
-            uri: PROTOCOL_URI.to_string(),
+            name: OPTIONS_NAME.to_string(),
+            symbol: OPTIONS_SYMBOL.to_string(),
+            uri: OPTIONS_URI.to_string(),
             seller_fee_basis_points: 0,
             creators: None,
             collection: None,

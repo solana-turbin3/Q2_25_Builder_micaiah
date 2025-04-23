@@ -23,8 +23,12 @@ pub struct Config {
     pub cn_bump: u8,
     /// The bump used to generate the Collection Mint.
     pub collection_mint_bump: u8,
+    /// The bump used to generate the CN Metadata.
+    pub cn_metadata_bump: u8,
+    /// The bump used to generate the PT Metadata.
+    pub pt_metadata_bump: u8,
     /// The bump used to generate the Collection Metadata.
-    pub collection_meta_bump: u8,
+    pub collection_metadata_bump: u8,
     /// The bump used to generate the Collection Master Edition.
     pub collection_master_edition_bump: u8,
 }
