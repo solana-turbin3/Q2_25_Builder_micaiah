@@ -3,13 +3,11 @@ use anchor_lang::prelude::*;
 #[account]
 #[derive(InitSpace)]
 pub struct Config {
-    /// The seed used to generate this Config account.
-    pub seed: u64,
     /// The authority that can update the config.
     pub authority: Option<Pubkey>,
     /// The address of the Convertible Note we'll be issuing.
     pub cn_mint: Pubkey,
-    /// The address of the Convertible Note we'll be issuing.
+    /// The address of the Protocol Token we'll be issuing.
     pub pt_mint: Pubkey,
     /// The address of the options NFT collection.
     pub collection_mint: Pubkey,
@@ -19,8 +17,18 @@ pub struct Config {
     pub locked: bool,
     /// The bump used to generate this Config account.
     pub config_bump: u8,
-    /// The bump used to generate the LP account.
+    /// The bump used to generate the PT Mint.
     pub pt_bump: u8,
-    /// The bump used to generate the treasury account.
-    pub treasury_bump: u8,
+    /// The bump used to generate the CN Mint.
+    pub cn_bump: u8,
+    /// The bump used to generate the Collection Mint.
+    pub collection_mint_bump: u8,
+    /// The bump used to generate the CN Metadata.
+    pub cn_metadata_bump: u8,
+    /// The bump used to generate the PT Metadata.
+    pub pt_metadata_bump: u8,
+    /// The bump used to generate the Collection Metadata.
+    pub collection_metadata_bump: u8,
+    /// The bump used to generate the Collection Master Edition.
+    pub collection_master_edition_bump: u8,
 }
