@@ -9,7 +9,7 @@ The user interacts with the protocol through a series of actions. The possible a
 ```mermaid
 flowchart TD
   User[User] -->|Deposit n SOL| Deposit[Deposit into Protocol]
-  Deposit -->|Mint m CNs to User| User
+  Deposit -->|Mint M CNs to User| User
   Deposit -->|Mint Option NFT to User| User
 
   User -->|Send CNs + Option| Convert[Convert to Protocol Tokens]

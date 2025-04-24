@@ -3,11 +3,11 @@
 In this scenario, the user wants to deposit `n` SOL into the protocol. The protocol should:
 
 - calculate the NAV (Net Asset Value)
-- calculate the number (`m`) of tokens to mint: `m = n / NAV`
-- mint `m` CN tokens to the user
-- mint `m` PT tokens to the vault
+- calculate the number (`M`) of tokens to mint: `M = n / NAV`
+- mint `M` CN tokens to the user
+- mint `M` PT tokens to the vault
 - mint a Token2022 NFT to the user with metadata:
-  - amount allowed: `m`
+  - amount allowed: `M`
   - issue slot: current slot
   - last updated slot: current slot
 
@@ -26,15 +26,15 @@ sequenceDiagram
   User->>ProtocolProgram: Deposit n SOL
 
   ProtocolProgram->>ProtocolProgram: Calculate NAV = TV / PTs
-  ProtocolProgram->>ProtocolProgram: Calculate m = n / NAV
+  ProtocolProgram->>ProtocolProgram: Calculate M = n / NAV
 
   ProtocolProgram->>SystemProgram: Transfer n SOL to Treasury
   SystemProgram->>Treasury: Transfer n SOL to Treasury
 
-  ProtocolProgram->>CNMint: Mint m CN to user
-  CNMint->>User: Mint m CN to user
-  ProtocolProgram->>PTMint: Mint m PT to Vault
-  PTMint->>Vault: Mint m PT to Vault
+  ProtocolProgram->>CNMint: Mint M CN to user
+  CNMint->>User: Mint M CN to user
+  ProtocolProgram->>PTMint: Mint M PT to Vault
+  PTMint->>Vault: Mint M PT to Vault
 
   ProtocolProgram->>NFTMint: Mint NFT to user
   NFTMint->>User: Mint NFT to user
