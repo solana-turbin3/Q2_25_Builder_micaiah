@@ -1,8 +1,8 @@
-
 ## Scenarios
 
 ### User-initiated Scenarios
 
+- [High-level overview](user-overview.md)
 - [Deposit into Protocol (todo)](deposit_protocol.md)
 - [Convert NFT Option + CN for Protocol Token](convert_option.md)
 - [Redeem CN for SOL](redeem_cn.md)
