@@ -1,15 +1,12 @@
-
 ## Convert NFT Option + CN for Protocol Token
 
 For all scenarios, the user is wanting to convert `n` CNs into PTs, and the NFT option metadata specifies `m` allowed conversions.
 
 #### Scenario 1: `n < m`
 
-In this scenario, the user has an NFT with an allowed amount of `m` CN, and they want to convert `n` CN into PT, where `n < m` (they don't have enough CNs to fulfill the entire NFT amount). 
+In this scenario, the user has an NFT with an allowed amount of `m` CN, and they want to convert `n` CN into PT, where `n < m` (they don't have enough CNs to fulfill the entire NFT amount).
 
 To handle the discrepancy, the NFT is updated to account for the new allowed amount.
-
-
 
 #### Scenario 2: `n = m`
 
@@ -28,7 +25,7 @@ sequenceDiagram
   participant User
   participant ProtocolProgram
   participant CNMint
-  participant PTMint
+  participant Vault
   participant NFTMetadata
   participant BurnAddress
 
@@ -44,14 +41,14 @@ sequenceDiagram
     ProtocolProgram->>CNMint: Burn n CN
     CNMint->>BurnAddress: Transfer n CN
 
-    ProtocolProgram->>PTMint: Mint n PT to user
+    ProtocolProgram->>Vault: Transfer n PT to user
 
     ProtocolProgram->>NFTMetadata: Burn NFT (fully fulfilled)
   else n < m
     ProtocolProgram->>CNMint: Burn n CN
     CNMint->>BurnAddress: Transfer n CN
 
-    ProtocolProgram->>PTMint: Mint n PT to user
+    ProtocolProgram->>Vault: Transfer n PT to user
 
     ProtocolProgram->>NFTMetadata: Decrement conversions by n
   end
