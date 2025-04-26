@@ -1,12 +1,11 @@
 [toolchain]
-package_manager = "yarn"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
-invest_in_sol = "7HLJsmGgZ37JAqmihGYNqmcuxG1qvt4s9t3EWJyaaPVo"
+invest_in_sol = "HC3woQjXDRRA91VsoGit6SZz2CzcAeKHE4BbagYFWUWr"
 
 [registry]
 url = "https://api.apr.dev"

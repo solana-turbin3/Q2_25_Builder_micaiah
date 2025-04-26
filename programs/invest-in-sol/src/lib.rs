@@ -5,21 +5,21 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
-declare_id!("3SUC8vzo7YcLvgDYo5xoDeMf7ReQdYZUDmi6Hnb9HAv3");
+declare_id!("HC3woQjXDRRA91VsoGit6SZz2CzcAeKHE4BbagYFWUWr");
 
 #[program]
 pub mod invest_in_sol {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, authority: Option<Pubkey>) -> Result<()> {
-        ctx.accounts.initialize_cn_metadata(&ctx.bumps)?;
-        ctx.accounts.initialize_pt_metadata(&ctx.bumps)?;
-        ctx.accounts.initialize_nft_metadata(&ctx.bumps)?;
-        // ctx.accounts.initialize_nft_master_edition()?;
-        // ctx.accounts.initialize_states(
-        //     authority,
-        //     ctx.bumps,
-        // )
-        Ok(())
+    pub fn initialize_convertible_note(ctx: Context<InitializeConvertibleNote>) -> Result<()> {
+        ctx.accounts.initialize(&ctx.bumps)
+    }
+
+    pub fn initialize_protocol_token(ctx: Context<InitializeProtocolToken>) -> Result<()> {
+        ctx.accounts.initialize(&ctx.bumps)
+    }
+
+    pub fn initialize_nft_collection(ctx: Context<InitializeNftCollection>) -> Result<()> {
+        ctx.accounts.initialize(&ctx.bumps)
     }
 }
