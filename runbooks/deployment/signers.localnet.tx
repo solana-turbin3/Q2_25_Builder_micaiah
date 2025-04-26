@@ -1,0 +1,15 @@
+
+signer "payer" "svm::secret_key" {
+    keypair_json = input.authority_keypair_json
+}
+    
+signer "authority" "svm::secret_key" {
+    keypair_json = input.authority_keypair_json
+}
+
+action "setup" "svm::setup_surfnet" {
+    set_account {
+        public_key = signer.payer.public_key
+        lamports = 1000000000000
+    }
+}

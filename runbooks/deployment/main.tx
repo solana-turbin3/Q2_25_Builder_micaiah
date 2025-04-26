@@ -1,0 +1,15 @@
+################################################################
+# Manage investInSOL deployment through Crypto Infrastructure as Code
+################################################################
+
+addon "svm" {
+    rpc_api_url = input.rpc_api_url
+    network_id = input.network_id
+}
+
+action "deploy_invest_in_sol" "svm::deploy_program" {
+    description = "Deploy invest_in_sol program"
+    program = svm::get_program_from_anchor_project("invest_in_sol") 
+    authority = signer.authority
+    payer = signer.payer
+}

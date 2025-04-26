@@ -1,0 +1,80 @@
+addon "svm" {
+    rpc_api_url = "http://localhost:8899"
+    network_id = "localnet"
+}
+signer "initializer" "svm::secret_key" {
+    keypair_json = "~/.config/solana/id.json"
+}
+
+variable "program" {
+    value = svm::get_program_from_anchor_project("invest_in_sol")
+}
+
+variable "token_metadata_program" {
+    value = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
+}
+
+
+variable "treasury" {
+    value = svm::find_pda(
+        variable.program.program_id, 
+        ["treasury"]
+    )
+}
+variable "config" {
+    value = svm::find_pda(
+        variable.program.program_id, 
+        ["config"]
+    )
+}
+variable "cn_mint" {
+    value = svm::find_pda(
+        variable.program.program_id, 
+        ["cn", variable.config.pda]
+    )
+}
+variable "pt_mint" {
+    value = svm::find_pda(
+        variable.program.program_id, 
+        ["pt", variable.config.pda]
+    )
+}
+variable "collection_mint" {
+    value = svm::find_pda(
+        variable.program.program_id, 
+        ["nft_options", variable.config.pda]
+    )
+}
+variable "collection_metadata" {
+    value = svm::find_pda(
+        variable.program.program_id, 
+        ["metadata", variable.token_metadata_program, variable.collection_mint.pda]
+    )
+}
+
+output "pdas" {
+    value = {
+        treasury = std::encode_base58(variable.treasury.pda)
+        config = std::encode_base58(variable.config.pda)
+        cn_mint = std::encode_base58(variable.cn_mint.pda)
+        pt_mint = std::encode_base58(variable.pt_mint.pda)
+        collection_mint = std::encode_base58(variable.collection_mint.pda)
+        collection_metadata = std::encode_base58(variable.collection_metadata.pda)
+    }
+}
+
+action "initialize" "svm::process_instructions" {
+	signers = [signer.initializer]
+    instruction {
+        program_idl = variable.program.idl
+        instruction_name = "initialize"
+        instruction_args = [null]
+        initializer {
+            public_key = signer.initializer.public_key
+        }
+    }
+}
+output "signature" {
+    description = "The signature of the transaction"
+    value = action.initialize.signature
+}
