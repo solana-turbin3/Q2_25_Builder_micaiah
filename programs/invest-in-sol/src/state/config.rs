@@ -13,12 +13,12 @@ pub struct Config {
     pub collection_mint: Pubkey,
     /// The optional fee for using the protocol.
     pub fee: Option<u16>,
-    /// Used to lock the protocol.
-    pub locked: bool,
+    /// Used to lock the protocol in totality.
+    pub locked: bool, // Global lock for all user-facing instructions
+    /// Lock specifically for the deposit instruction.
+    pub deposit_locked: bool,
+    /// Lock specifically for the convert instruction.
+    pub convert_locked: bool,
     /// The bump used to generate this Config account.
     pub config_bump: u8,
-    /// The bump used to generate the PT Mint.
-    pub pt_bump: u8,
-    /// The bump used to generate the CN Mint.
-    pub cn_bump: u8,
 }

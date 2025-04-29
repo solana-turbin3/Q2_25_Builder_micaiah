@@ -1,11 +1,10 @@
 use anchor_lang::prelude::*;
 //    - A treasury PDA
+//        - tracks deposited sol
+//    - A treasury vault
 //        - Holds:
-//            - CN / PT token account references
+//            - PT token ata
 //            - Ability to hold sol
-//            - address of LP Token look up table
-//        - methods:
-//          - update look up table, takes address which must be
 
 #[account]
 #[derive(InitSpace)]
@@ -14,4 +13,7 @@ pub struct Treasury {
     pub authority: Option<Pubkey>,
     /// The bump used to generate the treasury account.
     pub treasury_bump: u8,
+    /// The total amount of SOL deposited into the treasury vault.
+    #[max_len(8)] // u64 size
+    pub total_deposited_sol: u64,
 }

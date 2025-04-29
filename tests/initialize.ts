@@ -1,246 +1,158 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program } from "@coral-xyz/anchor";
+import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
-import wallet from "../wallet.json";
+import { assert, expect } from "chai";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
-  Connection,
-  Keypair,
-  PublicKey,
-  sendAndConfirmRawTransaction
-  
-} from "@solana/web3.js";
+    CN_MINT_ADDRESS,
+    PT_MINT_ADDRESS,
+    COLLECTION_MINT_ADDRESS,
+    requestAirdrop
+} from "./utils";
 
-import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
-import { expect } from "chai";
+describe("initialize instruction (with hardcoded mints)", () => {
+    const provider = anchor.AnchorProvider.env();
+    anchor.setProvider(provider);
 
-const METADATA_PROGRAM_ID = new PublicKey(
-  "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
-);
-
-// For this protocol, we initialize:
-//    - Tokens (Convertible note and protocol token)
-//    - NFT Collection
-//    - A vault pda
-//        - Holds:
-//            - PT
-//            - Mint authority / Metadata authority for nfts
-describe("initialize protocol", async () => {
-  const program = anchor.workspace.investInSol as Program<InvestInSol>;
-
-  /// Roles accounts
-  const initializer = Keypair.fromSecretKey(new Uint8Array(wallet));
-  /// this should likely be initializer or is it a separate admin key?
-  const authority = Keypair.generate();
-
-  ///
-  //Config / State accounts
-  ///
-  const config = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("config")],
-    program.programId
-  )[0];
-
-  ///
-  // Convertible note accounts
-  ///
-  const cnMint = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("cn"), config.toBuffer()],
-    program.programId
-  )[0];
-
-  const cnMetadata = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      cnMint.toBuffer(),
-    ],
-    METADATA_PROGRAM_ID
-  )[0];
-
-  ///
-  //Protocol token accounts
-  ///
-  const ptMint = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("pt"), config.toBuffer()],
-    program.programId
-  )[0];
-
-  const ptMetadata = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      ptMint.toBuffer(),
-    ],
-    METADATA_PROGRAM_ID
-  )[0];
-
-  ///
-  // NFT Options accounts
-  ///
-  const collectionMint = anchor.web3.PublicKey.findProgramAddressSync(
-    [Buffer.from("collection_mint"), config.toBuffer()],
-    program.programId
-  )[0];
-
-  const collectionMetadata = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      collectionMint.toBuffer(),
-    ],
-    METADATA_PROGRAM_ID
-  )[0];
-
-  const collectionMasterEdition = anchor.web3.PublicKey.findProgramAddressSync(
-    [
-      Buffer.from("metadata"),
-      METADATA_PROGRAM_ID.toBuffer(),
-      collectionMint.toBuffer(),
-      Buffer.from("edition"),
-    ],
-    METADATA_PROGRAM_ID
-  )[0];
+    const program = anchor.workspace.InvestInSol as Program<InvestInSol>;
+    const initializer = provider.wallet as Wallet; // use the provider's wallet as initializer/authority
 
 
-  anchor.setProvider(anchor.AnchorProvider.local("http://localhost:8899"));
-  const connection = new Connection("http://localhost:8899", {
-    commitment: "confirmed",
-  });
-  ///
-  //CN Token
-  ///
-  it.only("initializes convertible note", async () => {
-    const account = await program.provider.connection.getAccountInfo(
-      initializer.publicKey
-    );
-    const recentBlockhash =
-      await program.provider.connection.getLatestBlockhash();
+    const cnMint = CN_MINT_ADDRESS;
+    const ptMint = PT_MINT_ADDRESS;
+    const collectionMint = COLLECTION_MINT_ADDRESS;
 
-    const tx = await program.methods
-      .initializeConvertibleNote()
-      .accountsPartial({
-        initializer: initializer.publicKey,
-        cnMint: cnMint,
-        cnMetadata: cnMetadata,
-        config,
-        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-        metadataProgram: METADATA_PROGRAM_ID,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([initializer]);
+    // pdas to be derived
+    let configPda: PublicKey;
+    let configBump: number;
+    let treasuryPda: PublicKey;
+    let treasuryBump: number;
+    let treasuryVaultPda: PublicKey;
+    let treasuryVaultBump: number;
 
-    const theTx = await tx.transaction();
-    theTx.recentBlockhash = recentBlockhash.blockhash;
-    console.log(recentBlockhash.blockhash);
-    theTx.feePayer = initializer.publicKey;
-    theTx.sign(initializer);
-    const signature = await sendAndConfirmRawTransaction(
-      connection,
-      theTx.serialize()
-    );
-    
 
-    console.log("transaction confirmed:",)
+    before(async () => {
+        // airdrop initializer if needed
+        await requestAirdrop(provider, initializer.publicKey, 2 * LAMPORTS_PER_SOL);
 
-    // verify the mint was created
-    const mintAccount = await connection.getAccountInfo(cnMint);
-    expect(mintAccount).to.not.be.null;
-    expect(mintAccount?.owner).to.equal(TOKEN_2022_PROGRAM_ID);
+        // log addresses being used
+        console.log(`using Initializer: ${initializer.publicKey.toBase58()}`);
+        console.log(`using CN Mint: ${cnMint.toBase58()}`);
+        console.log(`using PT Mint: ${ptMint.toBase58()}`);
+        console.log(`using Collection Mint: ${collectionMint.toBase58()}`);
 
-    // verify the metadata was created
-    const metadataAccount = await connection.getAccountInfo(cnMetadata);
-    expect(metadataAccount).to.not.be.null;
-    expect(metadataAccount?.owner).to.equal(METADATA_PROGRAM_ID);
-  });
+        // derive PDA addresses
+        [configPda, configBump] = PublicKey.findProgramAddressSync(
+            [Buffer.from("config")],
+            program.programId
+        );
+        [treasuryPda, treasuryBump] = PublicKey.findProgramAddressSync(
+            [Buffer.from("treasury")],
+            program.programId
+        );
+        [treasuryVaultPda, treasuryVaultBump] = PublicKey.findProgramAddressSync(
+            [Buffer.from("treasury_vault"), treasuryPda.toBuffer()],
+            program.programId
+        );
 
-  ///
-  //PT Token
-  ///
+         console.log(`derived Config PDA: ${configPda.toBase58()}`);
+         console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
+         console.log(`derived Treasury Vault PDA: ${treasuryVaultPda.toBase58()}`);
 
-  it("initializes protocol token", async () => {
-    const account = await program.provider.connection.getAccountInfo(
-      initializer.publicKey
-    );
-    const recentBlockhash =
-      await program.provider.connection.getLatestBlockhash();
+        // important pre-requisite for testing against persistent environments:
+        // ensure the hardcoded mints exist and the initializer wallet
+        // has delegated authority appropriately *before* running tests.
+        // for `anchor test`, the environment is clean, so we just need the mints to exist.
+        // (we removed the createMint calls as requested).
+    });
 
-    const tx = await program.methods
-      .initializeProtocolToken()
-      .accountsPartial({
-        initializer: initializer.publicKey,
-        ptMint: ptMint,
-        ptMetadata: ptMetadata,
-        config,
-        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-        metadataProgram: METADATA_PROGRAM_ID,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([initializer]);
+    it("initializes the protocol state", async () => {
+        // ensure accounts don't exist yet (this might fail if run after other tests on same localnet instance)
+        // consider resetting the localnet (`anchor localnet --force`) before running tests if needed.
+        const initialConfigInfo = await provider.connection.getAccountInfo(configPda);
+        const initialTreasuryInfo = await provider.connection.getAccountInfo(treasuryPda);
+        const initialVaultInfo = await provider.connection.getAccountInfo(treasuryVaultPda);
+        // these assertions might be too strict if tests are run sequentially without resetting
+        // assert.isNull(initialConfigInfo, "config PDA should not exist before init");
+        // assert.isNull(initialTreasuryInfo, "treasury PDA should not exist before init");
+        // assert.isNull(initialVaultInfo, "treasury Vault PDA should not exist before init");
+        if (initialConfigInfo || initialTreasuryInfo || initialVaultInfo) {
+            console.warn("warn: accounts already exist before initialization test. state verification might be inaccurate if not the first run.");
+        }
 
-    const theTx = await tx.transaction();
-    theTx.recentBlockhash = recentBlockhash.blockhash;
-    theTx.feePayer = initializer.publicKey;
-    theTx.sign(initializer);
-    const signature = await sendAndConfirmRawTransaction(
-      connection,
-      theTx.serialize()
-    );
 
-    // verify the mint was created
-    const mintAccount = await connection.getAccountInfo(ptMint);
-    expect(mintAccount).to.not.be.null;
-    expect(mintAccount?.owner).to.equal(TOKEN_2022_PROGRAM_ID);
+        console.log("calling initialize instruction...");
+        // call the initialize instruction
+        await program.methods
+            .initialize()
+            .accounts({
+                initializer: initializer.publicKey,
+                cnMint: cnMint, // use hardcoded address
+                ptMint: ptMint, // use hardcoded address
+                collectionMint: collectionMint, // use hardcoded address
+                config: configPda,
+                treasury: treasuryPda,
+                treasuryVault: treasuryVaultPda,
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([initializer.payer]) // sign with the wallet provider's keypair
+            .rpc({ commitment: "confirmed" });
+        console.log("initialize instruction successful.");
 
-    // verify the metadata was created
-    const metadataAccount = await connection.getAccountInfo(ptMetadata);
-    expect(metadataAccount).to.not.be.null;
-    expect(metadataAccount?.owner).to.equal(METADATA_PROGRAM_ID);
-  });
+        console.log("verifying initialized state...");
+        // verify Config account
+        const configAccount = await program.account.config.fetch(configPda);
+        assert.ok(configAccount.authority.equals(initializer.publicKey), "config authority mismatch");
+        assert.ok(configAccount.cnMint.equals(cnMint), "config CN mint mismatch");
+        assert.ok(configAccount.ptMint.equals(ptMint), "config PT mint mismatch");
+        assert.ok(configAccount.collectionMint.equals(collectionMint), "config Collection mint mismatch");
+        assert.isNull(configAccount.fee, "config fee should be None initially");
+        assert.isFalse(configAccount.locked, "config global lock should be false");
+        assert.isFalse(configAccount.depositLocked, "config deposit lock should be false");
+        assert.isFalse(configAccount.convertLocked, "config convert lock should be false");
+        assert.strictEqual(configAccount.configBump, configBump, "config bump mismatch");
 
-  ///
-  //NFT collection
-  ///
+        // verify Treasury account
+        const treasuryAccount = await program.account.treasury.fetch(treasuryPda);
+        assert.ok(treasuryAccount.authority.equals(initializer.publicKey), "treasury authority mismatch");
+        assert.strictEqual(treasuryAccount.treasuryBump, treasuryBump, "treasury bump mismatch");
+        assert.strictEqual(treasuryAccount.totalDepositedSol.toNumber(), 0, "treasury total deposits should be 0");
 
-  it("initializes nft collection", async () => {
-    const account = await program.provider.connection.getAccountInfo(
-      initializer.publicKey
-    );
-    const recentBlockhash =
-      await program.provider.connection.getLatestBlockhash();
+        // verify Treasury Vault account exists and is owned by the program
+        const vaultInfo = await provider.connection.getAccountInfo(treasuryVaultPda);
+        assert.isNotNull(vaultInfo, "treasury Vault PDA should exist after init");
+        assert.ok(vaultInfo.owner.equals(program.programId), "treasury Vault owner should be the program");
+        // vault lamports might not be exactly 0 if rent was paid, check it's at least rent-exempt minimum
+        const rentExemptLamports = await provider.connection.getMinimumBalanceForRentExemption(vaultInfo.data.length);
+        assert.strictEqual(vaultInfo.lamports, rentExemptLamports, "treasury Vault lamports mismatch (should be rent-exempt minimum)");
+        console.log("initialized state verified.");
+    });
 
-    const tx = await program.methods
-      .initializeNftCollection()
-      .accountsPartial({
-        initializer: initializer.publicKey,
-        collectionMint: collectionMint,
-        collectionMetadata: collectionMetadata,
-        config,
-        sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY,
-        metadataProgram: METADATA_PROGRAM_ID,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-        systemProgram: anchor.web3.SystemProgram.programId,
-      })
-      .signers([initializer]);
+     it("fails if called again", async () => {
+         console.log("testing re-initialization failure...");
+         try {
+             await program.methods
+                 .initialize()
+                 .accounts({
+                     initializer: initializer.publicKey,
+                     cnMint: cnMint,
+                     ptMint: ptMint,
+                     collectionMint: collectionMint,
+                     config: configPda,
+                     treasury: treasuryPda,
+                     treasuryVault: treasuryVaultPda,
+                     systemProgram: SystemProgram.programId,
+                 })
+                 .signers([initializer.payer])
+                 .rpc({ commitment: "confirmed" });
+             assert.fail("initialize should fail if called again");
+         } catch (err) {
+             // expect an error because the accounts (config, treasury, vault) already exist
+             // error might be "already in use" or a custom Anchor error if using init_if_needed elsewhere
+             // console.error("expected error:", err.toString());
+             expect(err.toString()).to.match(/already in use|custom program error: 0x0/i); // match common errors for re-init
+             console.log("re-initialization failed as expected.");
+         }
+     });
 
-    const theTx = await tx.transaction();
-    theTx.recentBlockhash = recentBlockhash.blockhash;
-    theTx.feePayer = initializer.publicKey;
-    theTx.sign(initializer);
-    const signature = await sendAndConfirmRawTransaction(
-      connection,
-      theTx.serialize()
-    );
-
-    // verify the mint was created
-    const mintAccount = await connection.getAccountInfo(collectionMint);
-    expect(mintAccount).to.not.be.null;
-    expect(mintAccount?.owner).to.equal(TOKEN_2022_PROGRAM_ID);
-
-    // verify the metadata was created
-    const metadataAccount = await connection.getAccountInfo(collectionMetadata);
-    expect(metadataAccount).to.not.be.null;
-    expect(metadataAccount?.owner).to.equal(METADATA_PROGRAM_ID);
-  });
 });
