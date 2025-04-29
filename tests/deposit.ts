@@ -17,8 +17,8 @@ describe("does initialize the protocol", () => {
 
   it("swaps USDC -> SOL", async () => {
     // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+    // const tx = await program.methods.initialize().rpc();
+    // console.log("Your transaction signature", tx);
 
     // get starting USDC balance on devnet
 
@@ -31,26 +31,26 @@ describe("does initialize the protocol", () => {
 
   it("mints protocol token, transfers token to vault", async () => {
     // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+    // const tx = await program.methods.initialize().rpc();
+    // console.log("Your transaction signature", tx);
   });
 
   it("creates NFT metadata account", async () => {
     // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+    // const tx = await program.methods.initialize().rpc();
+    // console.log("Your transaction signature", tx);
   });
 
   it("mints NFT to user", async () => {
     // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+    // const tx = await program.methods.initialize().rpc();
+    // console.log("Your transaction signature", tx);
   });
 
   it("mints protocol token, transfers fee to protocol and remaining tokens to depositor", async () => {
     // Add your test here.
-    const tx = await program.methods.initialize().rpc();
-    console.log("Your transaction signature", tx);
+    // const tx = await program.methods.initialize().rpc();
+    // console.log("Your transaction signature", tx);
   });
 
 });

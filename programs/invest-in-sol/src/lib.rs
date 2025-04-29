@@ -5,7 +5,7 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
-declare_id!("HC3woQjXDRRA91VsoGit6SZz2CzcAeKHE4BbagYFWUWr");
+declare_id!("GwuTyisS2uwa8SNZ7gR298gyLLWioSfrwPEZQeTScfvS");
 
 #[program]
 pub mod invest_in_sol {

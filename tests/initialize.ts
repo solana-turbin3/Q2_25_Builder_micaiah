@@ -6,8 +6,10 @@ import {
   Connection,
   Keypair,
   PublicKey,
-  sendAndConfirmRawTransaction,
+  sendAndConfirmRawTransaction
+  
 } from "@solana/web3.js";
+
 import { TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import { expect } from "chai";
 
@@ -100,18 +102,14 @@ describe("initialize protocol", async () => {
   )[0];
 
 
-  ///
-  //anchor in this bizzitch
-  ///
   anchor.setProvider(anchor.AnchorProvider.local("http://localhost:8899"));
-  // const rpcEndpoint = "https://localhost:8899"; // Replace with your RPC endpoint
-  // const wsEndpoint = "ws://localhost:8900"; // Replace with your WebSocket endpoint from Chainstack
-
-  const connection = new Connection("http://localhost:8899");
+  const connection = new Connection("http://localhost:8899", {
+    commitment: "confirmed",
+  });
   ///
   //CN Token
   ///
-  it("initializes convertible note", async () => {
+  it.only("initializes convertible note", async () => {
     const account = await program.provider.connection.getAccountInfo(
       initializer.publicKey
     );
@@ -134,12 +132,16 @@ describe("initialize protocol", async () => {
 
     const theTx = await tx.transaction();
     theTx.recentBlockhash = recentBlockhash.blockhash;
+    console.log(recentBlockhash.blockhash);
     theTx.feePayer = initializer.publicKey;
     theTx.sign(initializer);
     const signature = await sendAndConfirmRawTransaction(
       connection,
       theTx.serialize()
     );
+    
+
+    console.log("transaction confirmed:",)
 
     // verify the mint was created
     const mintAccount = await connection.getAccountInfo(cnMint);

@@ -5,14 +5,14 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-invest_in_sol = "HC3woQjXDRRA91VsoGit6SZz2CzcAeKHE4BbagYFWUWr"
+invest_in_sol = "GwuTyisS2uwa8SNZ7gR298gyLLWioSfrwPEZQeTScfvS"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
-wallet = "~/.config/solana/id.json"
+cluster = "Localnet"
+wallet = "wallet.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

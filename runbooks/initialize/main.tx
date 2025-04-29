@@ -3,7 +3,7 @@ addon "svm" {
     network_id = "localnet"
 }
 signer "initializer" "svm::secret_key" {
-    keypair_json = "~/.config/solana/id.json"
+    keypair_json = "./wallet.json"
 }
 
 variable "program" {
