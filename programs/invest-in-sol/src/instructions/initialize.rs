@@ -44,17 +44,6 @@ pub struct Initialize<'info> {
     )]
     pub treasury: Account<'info, Treasury>,
 
-    /// the vault account that will hold the SOL deposits.
-    /// owned by the treasury PDA.
-    #[account(
-        init,
-        payer = initializer,
-        seeds = [b"treasury_vault", treasury.key().as_ref()],
-        bump,
-        space = 8 // minimal space for a system account PDA owned by the program
-    )]
-    pub treasury_vault: SystemAccount<'info>, // anchor handles assigning ownership to the program
-
     // --- programs ---
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token2022>,
@@ -87,7 +76,6 @@ impl<'info> Initialize<'info> {
         msg!("protocol initialized:");
         msg!("  config PDA: {}", config.key());
         msg!("  treasury PDA: {}", treasury.key());
-        msg!("  treasury Vault: {}", ctx.accounts.treasury_vault.key());
         msg!("  CN Mint: {}", config.cn_mint);
         msg!("  PT Mint: {}", config.pt_mint);
         msg!("  Collection Mint: {}", config.collection_mint);
