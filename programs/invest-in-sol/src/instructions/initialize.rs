@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::Mint;
 
 use crate::state::{Config, Treasury};
 
@@ -8,13 +9,21 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
 
-    // --- pre-existing mints (authority delegated to config PDA before calling) ---
-    /// CHECK: CN Mint address, validation happens off-chain by ensuring authority is delegated.
-    pub cn_mint: UncheckedAccount<'info>,
-    /// CHECK: PT Mint address, validation happens off-chain by ensuring authority is delegated.
-    pub pt_mint: UncheckedAccount<'info>,
-    /// CHECK: NFT Collection Mint address, validation happens off-chain by ensuring authority is delegated.
-    pub collection_mint: UncheckedAccount<'info>,
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config
+    )]
+    pub cn_mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config
+    )]
+    pub pt_mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config
+    )]
+    pub collection_mint: InterfaceAccount<'info, Mint>,
 
     // --- PDAs & accounts to initialize ---
     #[account(
@@ -48,8 +57,7 @@ pub struct Initialize<'info> {
 
     // --- programs ---
     pub system_program: Program<'info, System>,
-    // we might need Token2022 later for minting, but not strictly for init
-    // pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token2022>,
 }
 
 impl<'info> Initialize<'info> {
