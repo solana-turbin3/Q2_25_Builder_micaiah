@@ -1,69 +1,37 @@
 use anchor_lang::prelude::*;
-use anchor_spl::{
-    associated_token::AssociatedToken,
-    token::{Mint, Token, TokenAccount},
-};
+use anchor_spl::token::Token;
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::Mint;
 
-use crate::state::Config;
-use crate::state::Treasury;
-
-
-// What do we initialize: 
-//    - Tokens (Convertible note and protocol token)
-//    - NFT Collection
-//    - A vault pda
-//        - Holds: 
-//            - PT
-//            - Mint authority / Metadata authority for nfts
-
+use crate::state::{Config, Treasury};
 
 #[derive(Accounts)]
-#[instruction(seed: u64)]
+#[instruction(option_duration: u32)] // add instruction argument
 pub struct Initialize<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
 
-    // todo: I think rather than this being just a `Mint`, we want it to be a _specific_ mint.
-    // it's a token that we've already created an know the address to. maybe it just needs to
-    // be another PDA generated in this initialize function?
-    pub cn_mint: Account<'info, Mint>,
     #[account(
-        init,
-        payer = initializer,
-        seeds = [b"cn", config.key().as_ref() ],
-        bump,
-        mint::decimals = 6,
-        mint::authority = config
+        mint::token_program = token_program,
+        mint::authority = config // config PDA will be mint authority
     )]
-    pub conv_note: Account<'info, TokenAccount>,
-
-    pub pt_mint: Account<'info, Mint>,
+    pub cn_mint: InterfaceAccount<'info, Mint>,
     #[account(
-        init,
-        payer = initializer,
-        seeds = [b"pt", config.key().as_ref() ],
-        bump,
-        mint::decimals = 6,
-        mint::authority = config
+        mint::token_program = token_program,
+        mint::authority = config // config PDA will be mint authority
     )]
-    pub protocol_token: Account<'info, Mint>,
-
-    // TODO: confirm this
-    pub collection_mint: Account<'info, Mint>,
+    pub pt_mint: InterfaceAccount<'info, Mint>,
     #[account(
-        init,
-        payer = initializer,
-        seeds = [b"pt", config.key().as_ref() ],
-        bump,
-        mint::decimals = 6,
-        mint::authority = config
+        mint::token_program = token_program,
+        mint::authority = config // config PDA will be mint authority
     )]
-    pub nft_collection: Account<'info, Mint>,
+    pub collection_mint: InterfaceAccount<'info, Mint>,
 
+    // --- PDAs & accounts to initialize ---
     #[account(
         init,
         payer = initializer,
-        seeds = [b"config", seed.to_le_bytes().as_ref()],
+        seeds = [Config::SEED_PREFIX], // use constant seed
         bump,
         space = 8 + Config::INIT_SPACE
     )]
@@ -72,37 +40,52 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = initializer,
-        seeds = [b"treasury", seed.to_le_bytes().as_ref()],
+        seeds = [Treasury::SEED_PREFIX], // use constant seed
         bump,
         space = 8 + Treasury::INIT_SPACE
     )]
     pub treasury: Account<'info, Treasury>,
 
-    pub associated_token_program: Program<'info, AssociatedToken>,
-
-    pub token_program: Program<'info, Token>,
+    // --- programs ---
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
 }
 
 impl<'info> Initialize<'info> {
-    pub fn initialize(
-        &mut self,
-        seed: u64,
-        authority: Option<Pubkey>,
-        bumps: InitializeBumps,
-    ) -> Result<()> {
-        *self.config = Config {
-            seed,
-            authority,
-            cn_mint: self.cn_mint.key(),
-            pt_mint: self.pt_mint.key(),
-            collection_mint: self.collection_mint.key(),
-            fee: None,
-            locked: false,
-            config_bump: bumps.config,
-            pt_bump: bumps.protocol_token,
-            treasury_bump: bumps.treasury,
-        };
+    // update handler signature
+    pub fn handler(ctx: Context<Initialize>, option_duration: u32) -> Result<()> {
+        // initialize config PDA
+        let config = &mut ctx.accounts.config;
+        config.authority = Some(ctx.accounts.initializer.key());
+        config.cn_mint = ctx.accounts.cn_mint.key();
+        config.pt_mint = ctx.accounts.pt_mint.key();
+        config.collection_mint = ctx.accounts.collection_mint.key();
+        config.fee = None; // default to no fee
+        config.option_duration = option_duration; // set from argument
+        config.option_count = 0; // initialize count
+        config.locked = false; // default to unlocked
+        config.deposit_locked = true; // default deposit to locked
+        config.convert_locked = true; // default convert to locked
+        config.bump = ctx.bumps.config; // use correct bump field name
+
+        // initialize treasury PDA
+        let treasury = &mut ctx.accounts.treasury;
+        treasury.authority = Some(ctx.accounts.initializer.key());
+        treasury.treasury_bump = ctx.bumps.treasury; // use correct bump field name 'treasury_bump'
+
+        // treasury_vault is initialized via account constraints.
+        // anchor should automatically assign ownership to the program
+        // we might want to explicitly transfer ownership to the treasury PDA if needed later,
+        // but for holding SOL deposited via CPI, program ownership is often sufficient.
+
+        msg!("protocol initialized:");
+        msg!("  config PDA: {}", config.key());
+        msg!("  treasury PDA: {}", treasury.key());
+        msg!("  CN Mint: {}", config.cn_mint);
+        msg!("  PT Mint: {}", config.pt_mint);
+        msg!("  Collection Mint: {}", config.collection_mint);
+        msg!("  Option Duration: {} seconds", config.option_duration);
+        msg!("  authority: {}", config.authority.unwrap());
 
         Ok(())
     }
