@@ -1,23 +1,33 @@
 use anchor_lang::prelude::*;
-//    - A treasury PDA
+//    - a treasury PDA
 //        - tracks deposited sol
-//    - A treasury vault
-//        - Holds:
+//    - a treasury vault
+//        - holds:
 //            - PT token ata
-//            - Ability to hold sol
+//            - ability to hold sol
 
 #[account]
 #[derive(InitSpace)]
 pub struct Treasury {
-    /// The authority that can update the treasury.
+    /// the authority that can update the treasury.
     pub authority: Option<Pubkey>,
-    /// The bump used to generate the treasury account.
+    /// the bump used to generate the treasury account.
     pub treasury_bump: u8,
-    /// The total amount of SOL deposited into the treasury vault.
+    /// the total amount of SOL deposited into the treasury vault.
     #[max_len(8)] // u64 size
     pub total_deposited_sol: u64,
 }
 impl Treasury {
+    pub const SEED_PREFIX: &'static [u8] = b"treasury";
+
+    pub fn get_seeds<'a>() -> [&'a [u8]; 1] {
+        [Self::SEED_PREFIX]
+    }
+
+    pub fn get_seeds_with_bump<'a>(bump: &'a [u8]) -> [&'a [u8]; 2] {
+        [Self::SEED_PREFIX, bump]
+    }
+
     /// calculates the net asset value (nav) of the treasury.
     /// todo: implement actual nav calculation based on treasury assets (sol, lps, etc.).
     pub fn calculate_nav(&self) -> Result<u64> {

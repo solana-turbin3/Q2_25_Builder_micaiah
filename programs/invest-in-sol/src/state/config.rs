@@ -13,6 +13,10 @@ pub struct Config {
     pub collection_mint: Pubkey,
     /// The optional fee for using the protocol.
     pub fee: Option<u16>,
+    /// Duration in seconds for which an option NFT is valid after minting.
+    pub option_duration: u32,
+    /// Counter for naming/tracking options (optional).
+    pub option_count: u64,
     /// Used to lock the protocol in totality.
     pub locked: bool, // Global lock for all user-facing instructions
     /// Lock specifically for the deposit instruction.
@@ -20,5 +24,17 @@ pub struct Config {
     /// Lock specifically for the convert instruction.
     pub convert_locked: bool,
     /// The bump used to generate this Config account.
-    pub config_bump: u8,
+    pub bump: u8, // Renamed from config_bump
+}
+
+impl Config {
+    pub const SEED_PREFIX: &'static [u8] = b"config";
+
+    pub fn get_seeds<'a>() -> [&'a [u8]; 1] {
+        [Self::SEED_PREFIX]
+    }
+
+    pub fn get_seeds_with_bump<'a>(bump: &'a [u8]) -> [&'a [u8]; 2] {
+        [Self::SEED_PREFIX, bump]
+    }
 }

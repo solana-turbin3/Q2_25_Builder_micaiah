@@ -8,8 +8,8 @@ pub struct UpdateLocks<'info> {
 
     #[account(
         mut,
-        seeds = [b"config"],
-        bump = config.config_bump,
+        seeds = [Config::SEED_PREFIX], // use constant
+        bump = config.bump, // use correct field name
         // has_one = authority @ AdminError::Unauthorized, // removed: manual check needed due to Option<Pubkey>
     )]
     pub config: Account<'info, Config>,

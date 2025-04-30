@@ -2,18 +2,19 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, Wallet } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
 import { assert } from "chai";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
+import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
     CN_MINT_ADDRESS,
     PT_MINT_ADDRESS,
     COLLECTION_MINT_ADDRESS,
     initializeProtocol,
     parseAnchorError,
+    findMetadataPda,
+    findMasterEditionPda,
     requestAirdrop,
-    METAPLEX_PID,
-    performDeposit
+    TOKEN_METADATA_PROGRAM_ID,
 } from "./utils";
-import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
 describe("admin instructions (with hardcoded mints)", () => {
     // configure the client to use the local cluster.
@@ -38,7 +39,8 @@ describe("admin instructions (with hardcoded mints)", () => {
 
         // initialize the protocol using the helper from utils
         // pass initializer.payer as Keypair because it needs to sign
-        const initResult = await initializeProtocol(program, provider, initializer.payer, cnMint, ptMint, collectionMint);
+        const optionDurationSeconds = 60 * 60 * 24 * 7; // default 7 days for admin tests
+        const initResult = await initializeProtocol(program, provider, initializer.payer, cnMint, ptMint, collectionMint, optionDurationSeconds);
         configPda = initResult.configPda;
         treasuryPda = initResult.treasuryPda; // store treasury PDA
         treasuryPda = initResult.treasuryPda; // store vault PDA
@@ -198,14 +200,14 @@ describe("admin instructions (with hardcoded mints)", () => {
         const depositorCnAta = await anchor.utils.token.associatedAddress({ mint: cnMint, owner: testUser.publicKey });
         const depositorOptionAta = await anchor.utils.token.associatedAddress({ mint: nftMint.publicKey, owner: testUser.publicKey });
         const protocolPtAta = await anchor.utils.token.associatedAddress({ mint: ptMint, owner: configPda });
-        const [nftMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), nftMint.publicKey.toBuffer()], METAPLEX_PID);
-        const [nftMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), nftMint.publicKey.toBuffer(), Buffer.from("edition")], METAPLEX_PID);
-        const [collectionMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), collectionMint.toBuffer()], METAPLEX_PID);
-        const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), collectionMint.toBuffer(), Buffer.from("edition")], METAPLEX_PID);
+        const [nftMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), nftMint.publicKey.toBuffer()], TOKEN_METADATA_PROGRAM_ID);
+        const [nftMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), nftMint.publicKey.toBuffer(), Buffer.from("edition")], TOKEN_METADATA_PROGRAM_ID);
+        const [collectionMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), collectionMint.toBuffer()], TOKEN_METADATA_PROGRAM_ID);
+        const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), collectionMint.toBuffer(), Buffer.from("edition")], TOKEN_METADATA_PROGRAM_ID);
 
         try {
             await program.methods.deposit(depositAmount).accounts({
-                 depositor: testUser.publicKey, depositorSolAccount: testUser.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                 depositor: testUser.publicKey, depositorSolAccount: testUser.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_2022_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId, metadataProgram: TOKEN_METADATA_PROGRAM_ID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY, // use token_2022_program_id
             }).signers([testUser, nftMint]).rpc({ commitment: "confirmed" });
             assert.fail("deposit should have failed due to global lock set by admin");
         } catch (err) {
@@ -225,20 +227,86 @@ describe("admin instructions (with hardcoded mints)", () => {
         // ensure unlocked first & perform a deposit to get something to convert
         await program.methods.updateLocks(false, false, false).accounts({ authority: initializer.publicKey, config: configPda }).signers([initializer.payer]).rpc();
         const depositAmount = new anchor.BN(0.2 * LAMPORTS_PER_SOL);
-        const depositInfo = await performDeposit(program, provider, testUser, configPda, treasuryPda, cnMint, ptMint, collectionMint, depositAmount);
+        // --- perform deposit and initialize option to test conversion ---
+        const nftMint = Keypair.generate(); // need a new mint for the option
+
+        // derive accounts for deposit
+        const depositorCnAta = await anchor.utils.token.associatedAddress({ mint: cnMint, owner: testUser.publicKey });
+        const protocolPtAta = await anchor.utils.token.associatedAddress({ mint: ptMint, owner: configPda });
+
+        // call deposit
+        console.log("performing deposit for convert test setup...");
+        await program.methods
+            .deposit(depositAmount)
+            .accounts({
+                depositor: testUser.publicKey,
+                depositorSolAccount: testUser.publicKey,
+                depositorCnAta: depositorCnAta,
+                config: configPda,
+                treasury: treasuryPda,
+                cnMint: cnMint,
+                ptMint: ptMint,
+                protocolPtAta: protocolPtAta,
+                tokenProgram: TOKEN_2022_PROGRAM_ID,
+                associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+                rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+            })
+            .signers([testUser])
+            .rpc({ commitment: "confirmed" });
+        console.log("deposit successful for convert test setup.");
+
+        // derive accounts for initialize_option
+        const userOptionAta = await anchor.utils.token.associatedAddress({ mint: nftMint.publicKey, owner: testUser.publicKey });
+        const metadataPda = findMetadataPda(nftMint.publicKey);
+        const masterEditionPda = findMasterEditionPda(nftMint.publicKey);
+        const [optionDataPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from("option_data"), nftMint.publicKey.toBuffer()],
+            program.programId
+        );
+
+        // call initialize_option
+        console.log("performing initialize_option for convert test setup...");
+        await program.methods
+            .initializeOption(depositAmount) // using same amount as deposit for this test setup
+            .accounts({
+                payer: testUser.publicKey,
+                config: configPda,
+                optionMint: nftMint.publicKey,
+                userOptionAta: userOptionAta,
+                metadataAccount: metadataPda,
+                masterEditionAccount: masterEditionPda,
+                optionData: optionDataPda,
+                tokenProgram: TOKEN_2022_PROGRAM_ID,
+                associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+                rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+            })
+            .signers([testUser, nftMint])
+            .rpc({ commitment: "confirmed" });
+        console.log("initialize_option successful for convert test setup.");
+
+        // store necessary info for the convert call later
+        const depositInfo = {
+            depositorCnAta: depositorCnAta,
+            depositorOptionAta: userOptionAta,
+            protocolPtAta: protocolPtAta, // needed by convert accounts
+            nftMint: nftMint, // store the keypair
+            optionDataPda: optionDataPda,
+        };
 
         // lock globally
         await program.methods.updateLocks(true, null, null).accounts({ authority: initializer.publicKey, config: configPda }).signers([initializer.payer]).rpc();
 
+        // derive Metaplex PDAs using depositInfo
+        const [nftMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), depositInfo.nftMint.publicKey.toBuffer()], TOKEN_METADATA_PROGRAM_ID);
+        const [nftMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), depositInfo.nftMint.publicKey.toBuffer(), Buffer.from("edition")], TOKEN_METADATA_PROGRAM_ID);
+        const [collectionMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), TOKEN_METADATA_PROGRAM_ID.toBuffer(), collectionMint.toBuffer()], TOKEN_METADATA_PROGRAM_ID);
         const converterPtAta = await anchor.utils.token.associatedAddress({ mint: ptMint, owner: testUser.publicKey });
-        // derive Metaplex PDAs
-        const [nftMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), depositInfo.nftMint.publicKey.toBuffer()], METAPLEX_PID);
-        const [nftMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), depositInfo.nftMint.publicKey.toBuffer(), Buffer.from("edition")], METAPLEX_PID);
-        const [collectionMetadataPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), collectionMint.toBuffer()], METAPLEX_PID);
-
         try {
             await program.methods.convert().accounts({
-                converter: testUser.publicKey, converterCnAta: depositInfo.depositorCnAta, converterOptionAta: depositInfo.depositorOptionAta, converterPtAta, config: configPda, protocolPtAta: depositInfo.protocolPtAta, cnMint, ptMint, nftMint: depositInfo.nftMint.publicKey, optionData: depositInfo.optionDataPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, collectionMetadata: collectionMetadataPda, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                converter: testUser.publicKey, converterCnAta: depositInfo.depositorCnAta, converterOptionAta: depositInfo.depositorOptionAta, converterPtAta, config: configPda, protocolPtAta: depositInfo.protocolPtAta, cnMint, ptMint, nftMint: depositInfo.nftMint.publicKey, optionData: depositInfo.optionDataPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, collectionMetadata: collectionMetadataPda, tokenProgram: TOKEN_2022_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId, metadataProgram: TOKEN_METADATA_PROGRAM_ID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY, // use token_2022_program_id
             }).signers([testUser]).rpc({ commitment: "confirmed" });
             assert.fail("convert should have failed due to global lock set by admin");
         } catch (err) {

@@ -17,17 +17,15 @@ describe("initialize instruction (with hardcoded mints)", () => {
     const program = anchor.workspace.InvestInSol as Program<InvestInSol>;
     const initializer = provider.wallet as Wallet; // use the provider's wallet as initializer/authority
 
-
     const cnMint = CN_MINT_ADDRESS;
     const ptMint = PT_MINT_ADDRESS;
     const collectionMint = COLLECTION_MINT_ADDRESS;
 
-    // pdas to be derived
+    // PDAs to be derived
     let configPda: PublicKey;
     let configBump: number;
     let treasuryPda: PublicKey;
     let treasuryBump: number;
-    let treasuryVaultBump: number;
 
 
     before(async () => {
@@ -54,10 +52,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
          console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
 
         // important pre-requisite for testing against persistent environments:
-        // ensure the hardcoded mints exist and the initializer wallet
-        // has delegated authority appropriately *before* running tests.
-        // for `anchor test`, the environment is clean, so we just need the mints to exist.
-        // (we removed the createMint calls as requested).
+        // ensure the hardcoded mints exist and the initializer wallet has 
+        // delegated authority appropriately *before* running tests.
+        // the environment is clean, so we just need the mints to exist and have
+        // proper authority delegated.
     });
 
     it("initializes the protocol state", async () => {
@@ -67,22 +65,23 @@ describe("initialize instruction (with hardcoded mints)", () => {
         const initialTreasuryInfo = await provider.connection.getAccountInfo(treasuryPda);
         const initialVaultInfo = await provider.connection.getAccountInfo(treasuryPda);
         // these assertions might be too strict if tests are run sequentially without resetting
-        // assert.isNull(initialConfigInfo, "config PDA should not exist before init");
-        // assert.isNull(initialTreasuryInfo, "treasury PDA should not exist before init");
+        // feel free to nuke
+        assert.isNull(initialConfigInfo, "config PDA should not exist before init");
+        assert.isNull(initialTreasuryInfo, "treasury PDA should not exist before init");
         if (initialConfigInfo || initialTreasuryInfo || initialVaultInfo) {
             console.warn("warn: accounts already exist before initialization test. state verification might be inaccurate if not the first run.");
         }
 
 
         console.log("calling initialize instruction...");
-        // call the initialize instruction
+
         await program.methods
             .initialize()
             .accounts({
                 initializer: initializer.publicKey,
-                cnMint: cnMint, // use hardcoded address
-                ptMint: ptMint, // use hardcoded address
-                collectionMint: collectionMint, // use hardcoded address
+                cnMint: cnMint,
+                ptMint: ptMint,
+                collectionMint: collectionMint,
                 config: configPda,
                 treasury: treasuryPda,
                 treasuryVault: treasuryPda,
@@ -93,7 +92,6 @@ describe("initialize instruction (with hardcoded mints)", () => {
         console.log("initialize instruction successful.");
 
         console.log("verifying initialized state...");
-        // verify Config account
         const configAccount = await program.account.config.fetch(configPda);
         assert.ok(configAccount.authority.equals(initializer.publicKey), "config authority mismatch");
         assert.ok(configAccount.cnMint.equals(cnMint), "config CN mint mismatch");
@@ -105,13 +103,13 @@ describe("initialize instruction (with hardcoded mints)", () => {
         assert.isFalse(configAccount.convertLocked, "config convert lock should be false");
         assert.strictEqual(configAccount.configBump, configBump, "config bump mismatch");
 
-        // verify Treasury account
+        // verify treasury account
         const treasuryAccount = await program.account.treasury.fetch(treasuryPda);
         assert.ok(treasuryAccount.authority.equals(initializer.publicKey), "treasury authority mismatch");
         assert.strictEqual(treasuryAccount.treasuryBump, treasuryBump, "treasury bump mismatch");
         assert.strictEqual(treasuryAccount.totalDepositedSol.toNumber(), 0, "treasury total deposits should be 0");
 
-        // verify Treasury account exists and is owned by the program
+        // verify treasury account exists and is owned by the program
         const vaultInfo = await provider.connection.getAccountInfo(treasuryPda);
         assert.ok(vaultInfo.owner.equals(program.programId), "treasury Vault owner should be the program");
 
@@ -141,7 +139,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
              assert.fail("initialize should fail if called again");
          } catch (err) {
              // expect an error because the accounts (config, treasury, vault) already exist
-             // error might be "already in use" or a custom Anchor error if using init_if_needed elsewhere
+             // error might be "already in use" or a custom anchor error
              // console.error("expected error:", err.toString());
              expect(err.toString()).to.match(/already in use|custom program error: 0x0/i); // match common errors for re-init
              console.log("re-initialization failed as expected.");

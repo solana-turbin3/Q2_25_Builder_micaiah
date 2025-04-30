@@ -3,12 +3,12 @@ use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{
         burn, transfer_checked, Burn, Mint, Token2022, TokenAccount, TransferChecked,
-    }, // Removed mint_to, MintTo; Added transfer_checked, TransferChecked
+    },
     metadata::Metadata as MetaplexMetadataProgram,
 };
-use mpl_token_metadata::instructions::BurnV1CpiBuilder; // Using BurnV1 for pNFTs
+use mpl_token_metadata::instructions::BurnV1CpiBuilder; // using BurnV1 for pNFTs
 
-use crate::state::{Config, OptionData}; // assuming Treasury state is not needed directly here yet
+use crate::state::{Config, OptionData}; // assuming treasury state is not needed directly here yet
 
 #[derive(Accounts)]
 pub struct Convert<'info> {
@@ -26,6 +26,7 @@ pub struct Convert<'info> {
         mut,
         associated_token::mint = nft_mint, // the specific NFT being burned
         associated_token::authority = converter,
+        token::token_program = token_program, // specify token program
     )]
     pub converter_option_ata: InterfaceAccount<'info, TokenAccount>,
 
@@ -39,16 +40,17 @@ pub struct Convert<'info> {
     pub converter_pt_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
-        seeds = [b"config"],
-        bump = config.config_bump,
+        seeds = [Config::SEED_PREFIX], // use constant for seed
+        bump = config.bump, // use correct field name
     )]
     pub config: Account<'info, Config>,
 
-    // protocol's PT Holding ATA (source for transfer)
+    // protocol's PT holding ATA (source for transfer)
     #[account(
         mut,
         associated_token::mint = pt_mint,
-        associated_token::authority = config, // owned by Config PDA
+        associated_token::authority = config, // owned by config PDA
+        token::token_program = token_program, // specify token program
     )]
     pub protocol_pt_ata: InterfaceAccount<'info, TokenAccount>,
 
@@ -71,23 +73,23 @@ pub struct Convert<'info> {
     )]
     pub nft_mint: InterfaceAccount<'info, Mint>,
 
-    // option Data PDA (linked to the NFT mint)
+    // option data PDA (linked to the NFT mint)
     #[account(
         mut,
-        seeds = [b"option_data", nft_mint.key().as_ref()],
+        seeds = [OptionData::SEED_PREFIX, nft_mint.key().as_ref()], // use constant for seed
         bump = option_data.bump,
         close = converter // close account and return rent to the converter
     )]
     pub option_data: Account<'info, OptionData>,
 
-    // metaplex accounts needed for BurnV1
-    /// CHECK: Checked by Metaplex CPI. PDA derived from nft_mint.
+    // Metaplex accounts needed for BurnV1
+    /// CHECK: checked by Metaplex CPI. PDA derived from nft_mint.
     #[account(mut)]
     pub nft_metadata: UncheckedAccount<'info>,
-    /// CHECK: Checked by Metaplex CPI. PDA derived from nft_mint.
+    /// CHECK: checked by Metaplex CPI. PDA derived from nft_mint.
     #[account(mut)]
     pub nft_master_edition: UncheckedAccount<'info>,
-    /// CHECK: Checked by Metaplex CPI. PDA derived from collection_mint.
+    /// CHECK: checked by Metaplex CPI. PDA derived from collection_mint.
     #[account(mut)]
     pub collection_metadata: UncheckedAccount<'info>, // required for BurnV1
 
@@ -96,7 +98,7 @@ pub struct Convert<'info> {
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub metadata_program: Program<'info, MetaplexMetadataProgram>,
-    /// CHECK: Required by Metaplex
+    /// CHECK: required by Metaplex
     pub sysvar_instructions: UncheckedAccount<'info>,
     pub rent: Sysvar<'info, Rent>, // needed for init_if_needed
 }
@@ -107,13 +109,24 @@ impl<'info> Convert<'info> {
         require!(!ctx.accounts.config.locked, ConvertError::ProtocolLocked);
         require!(!ctx.accounts.config.convert_locked, ConvertError::ConversionsLocked);
 
-        let num_of_cn_to_burn = ctx.accounts.option_data.num_of_cn;
-        require!(num_of_cn_to_burn > 0, ConvertError::InvalidOptionData);
+        // get clock and check expiration
+        let clock = Clock::get()?;
+        let option_data = &ctx.accounts.option_data;
+        require!(
+            !option_data.is_expired(clock.unix_timestamp),
+            ConvertError::OptionExpired
+        );
+
+        // get amount from option data
+        let amount_to_process = option_data.amount;
+        require!(amount_to_process > 0, ConvertError::InvalidOptionData); // ensure amount is valid
 
         msg!(
-            "attempting to convert option NFT {} for {} CN tokens",
+            "attempting to convert option NFT {} for {} tokens (amount/expiration: {}/{})",
             ctx.accounts.nft_mint.key(),
-            num_of_cn_to_burn
+            amount_to_process,
+            option_data.amount,
+            option_data.expiration
         );
 
         // 1. burn CN tokens from converter's ATA
@@ -126,29 +139,30 @@ impl<'info> Convert<'info> {
             ctx.accounts.token_program.to_account_info(),
             burn_cn_accounts,
         );
-        burn(burn_cn_ctx, num_of_cn_to_burn)?;
-        msg!("burned {} CN tokens", num_of_cn_to_burn);
+        burn(burn_cn_ctx, amount_to_process)?;
+        msg!("burned {} CN tokens", amount_to_process);
 
-        // prepare PDA signer seeds for minting PT
-        let config_seeds = &[&b"config"[..], &[ctx.accounts.config.config_bump]];
-        let signer_seeds = &[&config_seeds[..]];
+        // prepare PDA signer seeds for PT transfer using helper and longer-lived binding
+        let bump_seed = [ctx.accounts.config.bump];
+        let config_seeds_with_bump = Config::get_seeds_with_bump(&bump_seed);
+        let signer_seeds = &[&config_seeds_with_bump[..]];
 
         // 2. burn the NFT Option using Metaplex BurnV1
-        // BurnV1 requires the owner (converter) to sign, and potentially the collection metadata authority if rules apply.
-        // we are burning the token from the converter's ATA.
         // pass raw AccountInfo where needed by Metaplex CPI builder
-        // BurnV1CpiBuilder::new(&ctx.accounts.metadata_program.to_account_info()) // pass AccountInfo
-        //     .authority(&ctx.accounts.converter.to_account_info()) // the owner burning the token
-        //     .collection_metadata(Some(&ctx.accounts.collection_metadata.to_account_info())) // required for pNFT burn
-        //     .metadata(&ctx.accounts.nft_metadata.to_account_info())
-        //     .edition(Some(&ctx.accounts.nft_master_edition.to_account_info()))
-        //     .mint(&ctx.accounts.nft_mint.to_account_info())
-        //     .token(&ctx.accounts.converter_option_ata.to_account_info()) // the ATA holding the token to burn
-        //     // .master_edition_mint(Some(&ctx.accounts.collection_mint.to_account_info())) // not typically needed for burning instance
-        //     // .master_edition_token_account(None) // not typically needed for burning instance
-        //     .spl_token_program(&ctx.accounts.token_program.to_account_info())
-        //     .invoke()?; // let's see if '?' works now, otherwise map error
-        // msg!("burned NFT Option {}", ctx.accounts.nft_mint.key());
+        BurnV1CpiBuilder::new(&ctx.accounts.metadata_program.to_account_info()) // pass AccountInfo
+            .authority(&ctx.accounts.converter.to_account_info()) // the owner burning the token
+            .collection_metadata(Some(&ctx.accounts.collection_metadata.to_account_info())) // required for pNFT burn
+            .metadata(&ctx.accounts.nft_metadata.to_account_info())
+            .edition(Some(&ctx.accounts.nft_master_edition.to_account_info()))
+            .mint(&ctx.accounts.nft_mint.to_account_info())
+            .token(&ctx.accounts.converter_option_ata.to_account_info()) // the ATA holding the token to burn
+            .spl_token_program(&ctx.accounts.token_program.to_account_info())
+            .invoke() // invoke without signer seeds, converter signs
+            .map_err(|e| {
+                msg!("error burning nft: {:?}", e);
+                ProgramError::from(e) // map metaplex error to program error
+            })?;
+        msg!("burned NFT Option {}", ctx.accounts.nft_mint.key());
 
 
         // 3. transfer PT tokens from Protocol ATA to converter's ATA
@@ -165,12 +179,12 @@ impl<'info> Convert<'info> {
         );
         transfer_checked(
             transfer_pt_ctx,
-            num_of_cn_to_burn, // transfer the same amount as CN burned
+            amount_to_process, // transfer the same amount as CN burned
             ctx.accounts.pt_mint.decimals, // decimals needed for transfer_checked
         )?;
         msg!(
             "transferred {} PT tokens from protocol to converter",
-            num_of_cn_to_burn
+            amount_to_process
         );
 
         // 4. close the OptionData account (handled by `close = converter` constraint)
@@ -184,7 +198,7 @@ impl<'info> Convert<'info> {
 pub enum ConvertError {
     #[msg("invalid OptionData account or amount.")]
     InvalidOptionData,
-    #[msg("insufficient CN token balance.")] // anchor automatically checks this via ATA constraints usually
+    #[msg("insufficient CN token balance.")]
     InsufficientCnBalance,
     #[msg("account address mismatch.")]
     AddressMismatch,
@@ -192,4 +206,6 @@ pub enum ConvertError {
     ProtocolLocked,
     #[msg("conversions are currently locked.")]
     ConversionsLocked,
+    #[msg("option has expired.")]
+    OptionExpired,
 }
