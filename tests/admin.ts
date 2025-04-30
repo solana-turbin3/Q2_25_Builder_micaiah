@@ -26,7 +26,6 @@ describe("admin instructions (with hardcoded mints)", () => {
     const testUser = Keypair.generate(); // user for deposit/convert tests
     let configPda: PublicKey;
     let treasuryPda: PublicKey; // need for deposit helper
-    let treasuryVaultPda: PublicKey; // need for deposit helper
 
     const cnMint = CN_MINT_ADDRESS;
     const ptMint = PT_MINT_ADDRESS;
@@ -42,7 +41,7 @@ describe("admin instructions (with hardcoded mints)", () => {
         const initResult = await initializeProtocol(program, provider, initializer.payer, cnMint, ptMint, collectionMint);
         configPda = initResult.configPda;
         treasuryPda = initResult.treasuryPda; // store treasury PDA
-        treasuryVaultPda = initResult.treasuryVaultPda; // store vault PDA
+        treasuryPda = initResult.treasuryPda; // store vault PDA
 
         // verify initial state
         const configAccount = await program.account.config.fetch(configPda);
@@ -206,7 +205,7 @@ describe("admin instructions (with hardcoded mints)", () => {
 
         try {
             await program.methods.deposit(depositAmount).accounts({
-                 depositor: testUser.publicKey, depositorSolAccount: testUser.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryVaultPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                 depositor: testUser.publicKey, depositorSolAccount: testUser.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
             }).signers([testUser, nftMint]).rpc({ commitment: "confirmed" });
             assert.fail("deposit should have failed due to global lock set by admin");
         } catch (err) {
@@ -226,7 +225,7 @@ describe("admin instructions (with hardcoded mints)", () => {
         // ensure unlocked first & perform a deposit to get something to convert
         await program.methods.updateLocks(false, false, false).accounts({ authority: initializer.publicKey, config: configPda }).signers([initializer.payer]).rpc();
         const depositAmount = new anchor.BN(0.2 * LAMPORTS_PER_SOL);
-        const depositInfo = await performDeposit(program, provider, testUser, configPda, treasuryPda, treasuryVaultPda, cnMint, ptMint, collectionMint, depositAmount);
+        const depositInfo = await performDeposit(program, provider, testUser, configPda, treasuryPda, cnMint, ptMint, collectionMint, depositAmount);
 
         // lock globally
         await program.methods.updateLocks(true, null, null).accounts({ authority: initializer.publicKey, config: configPda }).signers([initializer.payer]).rpc();

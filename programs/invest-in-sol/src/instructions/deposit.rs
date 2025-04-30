@@ -69,13 +69,6 @@ pub struct Deposit<'info> {
     )]
     pub treasury: Account<'info, Treasury>,
 
-    #[account(
-        mut,
-        seeds = [b"treasury_vault", treasury.key().as_ref()],
-        bump, // need the vault bump if it was created as a PDA sys account
-    )]
-    pub treasury_vault: SystemAccount<'info>,
-
     // mints (checked against config)
     #[account(
         mut,
@@ -146,10 +139,10 @@ impl<'info> Deposit<'info> {
 
         require!(amount > 0, DepositError::ZeroAmount);
 
-        // 1. transfer SOL depositor -> treasury_vault
+        // 1. transfer SOL depositor -> treasury
         let transfer_accounts = system_program::Transfer {
             from: ctx.accounts.depositor_sol_account.to_account_info(),
-            to: ctx.accounts.treasury_vault.to_account_info(),
+            to: ctx.accounts.treasury.to_account_info(),
         };
         let cpi_ctx = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),

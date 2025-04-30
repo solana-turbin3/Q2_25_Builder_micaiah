@@ -29,7 +29,6 @@ describe("convert instruction (with hardcoded mints)", () => {
 
     let configPda: PublicKey;
     let treasuryPda: PublicKey;
-    let treasuryVaultPda: PublicKey; // needed for deposit helper
 
     // variables to store results from deposit setup
     let depositResult: {
@@ -49,7 +48,7 @@ describe("convert instruction (with hardcoded mints)", () => {
         const initResult = await initializeProtocol(program, provider, initializer.payer, cnMint, ptMint, collectionMint);
         configPda = initResult.configPda;
         treasuryPda = initResult.treasuryPda;
-        treasuryVaultPda = initResult.treasuryVaultPda; // store vault address
+        treasuryPda = initResult.treasuryPda; // store vault address
 
         // perform a deposit using helper to set up for conversion tests
         depositResult = await performDeposit(
@@ -58,7 +57,6 @@ describe("convert instruction (with hardcoded mints)", () => {
             converter, // use the converter keypair as the depositor
             configPda,
             treasuryPda,
-            treasuryVaultPda,
             cnMint,
             ptMint,
             collectionMint,
@@ -158,7 +156,7 @@ describe("convert instruction (with hardcoded mints)", () => {
     it("fails conversion when protocol is globally locked", async () => {
         console.log("testing global lock for conversion...");
         // need to deposit again to have something to convert
-        const depositResultLocked = await performDeposit(program, provider, converter, configPda, treasuryPda, treasuryVaultPda, cnMint, ptMint, collectionMint, depositAmount);
+        const depositResultLocked = await performDeposit(program, provider, converter, configPda, treasuryPda, cnMint, ptMint, collectionMint, depositAmount);
 
         // lock the protocol
         await program.methods.updateLocks(true, null, null).accounts({ authority: initializer.publicKey, config: configPda }).signers([initializer.payer]).rpc({ commitment: "confirmed" });
@@ -187,7 +185,7 @@ describe("convert instruction (with hardcoded mints)", () => {
     it("fails conversion when conversions are locked (but protocol unlocked)", async () => {
         console.log("testing convert lock...");
         // need to deposit again
-        const depositResultLocked = await performDeposit(program, provider, converter, configPda, treasuryPda, treasuryVaultPda, cnMint, ptMint, collectionMint, depositAmount);
+        const depositResultLocked = await performDeposit(program, provider, converter, configPda, treasuryPda, cnMint, ptMint, collectionMint, depositAmount);
 
         // lock conversions specifically
         await program.methods.updateLocks(null, null, true).accounts({ authority: initializer.publicKey, config: configPda }).signers([initializer.payer]).rpc({ commitment: "confirmed" });

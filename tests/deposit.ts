@@ -31,7 +31,6 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
     let configPda: PublicKey;
     let treasuryPda: PublicKey;
-    let treasuryVaultPda: PublicKey;
     let protocolPtAta: PublicKey; // protocol's ATA for PT
 
     before(async () => {
@@ -50,13 +49,12 @@ describe("deposit instruction (with hardcoded mints)", () => {
         const initResult = await initializeProtocol(program, provider, initializer.payer, cnMint, ptMint, collectionMint);
         configPda = initResult.configPda;
         treasuryPda = initResult.treasuryPda;
-        treasuryVaultPda = initResult.treasuryVaultPda;
+        treasuryPda = initResult.treasuryPda;
 
         // derive protocol's PT ATA address (needs configPda)
         protocolPtAta = await anchor.utils.token.associatedAddress({ mint: ptMint, owner: configPda });
         console.log(`config PDA: ${configPda.toBase58()}`);
         console.log(`treasury PDA: ${treasuryPda.toBase58()}`);
-        console.log(`treasury Vault PDA: ${treasuryVaultPda.toBase58()}`);
         console.log(`protocol PT ATA: ${protocolPtAta.toBase58()}`);
     });
 
@@ -76,7 +74,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
         const [collectionMasterEditionPda] = PublicKey.findProgramAddressSync([Buffer.from("metadata"), METAPLEX_PID.toBuffer(), collectionMint.toBuffer(), Buffer.from("edition")], METAPLEX_PID);
 
         // get initial states
-        const initialTreasuryVaultBalance = await provider.connection.getBalance(treasuryVaultPda);
+        const initialTreasuryBalance = await provider.connection.getBalance(treasuryPda);
         const initialTreasuryData = await program.account.treasury.fetch(treasuryPda);
         const initialDepositorSol = await provider.connection.getBalance(depositor.publicKey);
         let initialProtocolPtAtaBalance = BigInt(0); // use BigInt(0)
@@ -98,7 +96,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
                 optionData: optionDataPda,
                 config: configPda,
                 treasury: treasuryPda,
-                treasuryVault: treasuryVaultPda,
+                treasuryVault: treasuryPda,
                 cnMint: cnMint,
                 ptMint: ptMint,
                 collectionMint: collectionMint,
@@ -123,9 +121,9 @@ describe("deposit instruction (with hardcoded mints)", () => {
         console.log("verifying state changes...");
 
         // 1. SOL transfer
-        const finalTreasuryVaultBalance = await provider.connection.getBalance(treasuryVaultPda);
+        const finalTreasuryBalance = await provider.connection.getBalance(treasuryPda);
         const finalDepositorSol = await provider.connection.getBalance(depositor.publicKey);
-        assert.strictEqual(finalTreasuryVaultBalance, initialTreasuryVaultBalance + depositAmount.toNumber(), "treasury vault balance mismatch");
+        assert.strictEqual(finalTreasuryBalance, initialTreasuryBalance + depositAmount.toNumber(), "treasury balance mismatch");
         expect(finalDepositorSol).to.be.lessThan(initialDepositorSol - depositAmount.toNumber(), "depositor SOL should decrease");
 
         // 2. CN token mint
@@ -171,7 +169,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
         try {
             await program.methods.deposit(depositAmount).accounts({
-                 depositor: depositor.publicKey, depositorSolAccount: depositor.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryVaultPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                 depositor: depositor.publicKey, depositorSolAccount: depositor.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
             }).signers([depositor, nftMint]).rpc({ commitment: "confirmed" });
             assert.fail("deposit should have failed due to global lock");
         } catch (err) {
@@ -201,7 +199,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
         try {
              await program.methods.deposit(depositAmount).accounts({
-                 depositor: depositor.publicKey, depositorSolAccount: depositor.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryVaultPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                 depositor: depositor.publicKey, depositorSolAccount: depositor.publicKey, depositorCnAta, depositorOptionAta, nftMint: nftMint.publicKey, optionData: optionDataPda, config: configPda, treasury: treasuryPda, treasuryVault: treasuryPda, cnMint, ptMint, collectionMint, collectionMetadata: collectionMetadataPda, collectionMasterEdition: collectionMasterEditionPda, nftMetadata: nftMetadataPda, nftMasterEdition: nftMasterEditionPda, protocolPtAta, tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId, metadataProgram: METAPLEX_PID, sysvarInstructions: anchor.web3.SYSVAR_INSTRUCTIONS_PUBKEY, rent: anchor.web3.SYSVAR_RENT_PUBKEY,
              }).signers([depositor, nftMint]).rpc({ commitment: "confirmed" });
             assert.fail("deposit should have failed due to deposit lock");
         } catch (err) {

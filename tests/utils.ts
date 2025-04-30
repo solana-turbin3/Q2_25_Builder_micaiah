@@ -9,7 +9,9 @@ import { createMint, getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID, ASSOCI
 // - mint authority must be delegated to the config PDA *before* these tests run for deposit/convert to succeed.
 export const CN_MINT_ADDRESS = new PublicKey("LdV45HahKVpiVMdTCr6QFU8gK6uUqHRycpuGHkctAsn");
 export const PT_MINT_ADDRESS = new PublicKey("CZsQYCTjFcRHXVMibham5W8WKEeuQtTSARQreQ8KQ5ai");
-export const COLLECTION_MINT_ADDRESS = new PublicKey("CollectionMintAddrReplaceWithActualPublicKey3");
+// the below is the same as the PT mint to get around a non-base58 error and progress through the tests until i 
+// create collection on devnet
+export const COLLECTION_MINT_ADDRESS = new PublicKey("CZsQYCTjFcRHXVMibham5W8WKEeuQtTSARQreQ8KQ5ai");
 
 export const METAPLEX_PID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 
@@ -25,10 +27,9 @@ export async function initializeProtocol(
     cnMintPk: PublicKey,
     ptMintPk: PublicKey,
     collectionMintPk: PublicKey
-): Promise<{ configPda: PublicKey; treasuryPda: PublicKey; treasuryVaultPda: PublicKey; }> {
+): Promise<{ configPda: PublicKey; treasuryPda: PublicKey; }> {
     const [configPda] = PublicKey.findProgramAddressSync([Buffer.from("config")], program.programId);
     const [treasuryPda] = PublicKey.findProgramAddressSync([Buffer.from("treasury")], program.programId);
-    const [treasuryVaultPda] = PublicKey.findProgramAddressSync([Buffer.from("treasury_vault"), treasuryPda.toBuffer()], program.programId);
 
     const configInfo = await provider.connection.getAccountInfo(configPda);
     if (configInfo === null) {
@@ -42,7 +43,7 @@ export async function initializeProtocol(
                 collectionMint: collectionMintPk,
                 config: configPda,
                 treasury: treasuryPda,
-                treasuryVault: treasuryVaultPda,
+                treasuryVault: treasuryPda,
                 systemProgram: SystemProgram.programId,
             })
             .signers([initializer]) // initializer needs to sign
@@ -51,7 +52,7 @@ export async function initializeProtocol(
     } else {
          console.log("protocol already initialized.");
     }
-    return { configPda, treasuryPda, treasuryVaultPda };
+    return { configPda, treasuryPda };
 }
 
 /**
@@ -65,7 +66,6 @@ export async function performDeposit(
     depositor: Keypair, // depositor needs to sign
     configPda: PublicKey,
     treasuryPda: PublicKey,
-    treasuryVaultPda: PublicKey,
     cnMint: PublicKey,
     ptMint: PublicKey,
     collectionMint: PublicKey,
@@ -95,7 +95,7 @@ export async function performDeposit(
             optionData: optionDataPda,
             config: configPda,
             treasury: treasuryPda,
-            treasuryVault: treasuryVaultPda,
+            treasuryVault: treasuryPda,
             cnMint: cnMint,
             ptMint: ptMint,
             collectionMint: collectionMint,

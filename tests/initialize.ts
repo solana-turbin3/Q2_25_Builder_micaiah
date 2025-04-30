@@ -27,7 +27,6 @@ describe("initialize instruction (with hardcoded mints)", () => {
     let configBump: number;
     let treasuryPda: PublicKey;
     let treasuryBump: number;
-    let treasuryVaultPda: PublicKey;
     let treasuryVaultBump: number;
 
 
@@ -50,14 +49,9 @@ describe("initialize instruction (with hardcoded mints)", () => {
             [Buffer.from("treasury")],
             program.programId
         );
-        [treasuryVaultPda, treasuryVaultBump] = PublicKey.findProgramAddressSync(
-            [Buffer.from("treasury_vault"), treasuryPda.toBuffer()],
-            program.programId
-        );
 
          console.log(`derived Config PDA: ${configPda.toBase58()}`);
          console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
-         console.log(`derived Treasury Vault PDA: ${treasuryVaultPda.toBase58()}`);
 
         // important pre-requisite for testing against persistent environments:
         // ensure the hardcoded mints exist and the initializer wallet
@@ -71,11 +65,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
         // consider resetting the localnet (`anchor localnet --force`) before running tests if needed.
         const initialConfigInfo = await provider.connection.getAccountInfo(configPda);
         const initialTreasuryInfo = await provider.connection.getAccountInfo(treasuryPda);
-        const initialVaultInfo = await provider.connection.getAccountInfo(treasuryVaultPda);
+        const initialVaultInfo = await provider.connection.getAccountInfo(treasuryPda);
         // these assertions might be too strict if tests are run sequentially without resetting
         // assert.isNull(initialConfigInfo, "config PDA should not exist before init");
         // assert.isNull(initialTreasuryInfo, "treasury PDA should not exist before init");
-        // assert.isNull(initialVaultInfo, "treasury Vault PDA should not exist before init");
         if (initialConfigInfo || initialTreasuryInfo || initialVaultInfo) {
             console.warn("warn: accounts already exist before initialization test. state verification might be inaccurate if not the first run.");
         }
@@ -92,7 +85,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
                 collectionMint: collectionMint, // use hardcoded address
                 config: configPda,
                 treasury: treasuryPda,
-                treasuryVault: treasuryVaultPda,
+                treasuryVault: treasuryPda,
                 systemProgram: SystemProgram.programId,
             })
             .signers([initializer.payer]) // sign with the wallet provider's keypair
@@ -118,10 +111,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
         assert.strictEqual(treasuryAccount.treasuryBump, treasuryBump, "treasury bump mismatch");
         assert.strictEqual(treasuryAccount.totalDepositedSol.toNumber(), 0, "treasury total deposits should be 0");
 
-        // verify Treasury Vault account exists and is owned by the program
-        const vaultInfo = await provider.connection.getAccountInfo(treasuryVaultPda);
-        assert.isNotNull(vaultInfo, "treasury Vault PDA should exist after init");
+        // verify Treasury account exists and is owned by the program
+        const vaultInfo = await provider.connection.getAccountInfo(treasuryPda);
         assert.ok(vaultInfo.owner.equals(program.programId), "treasury Vault owner should be the program");
+
         // vault lamports might not be exactly 0 if rent was paid, check it's at least rent-exempt minimum
         const rentExemptLamports = await provider.connection.getMinimumBalanceForRentExemption(vaultInfo.data.length);
         assert.strictEqual(vaultInfo.lamports, rentExemptLamports, "treasury Vault lamports mismatch (should be rent-exempt minimum)");
@@ -140,7 +133,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
                      collectionMint: collectionMint,
                      config: configPda,
                      treasury: treasuryPda,
-                     treasuryVault: treasuryVaultPda,
+                     treasuryVault: treasuryPda,
                      systemProgram: SystemProgram.programId,
                  })
                  .signers([initializer.payer])
