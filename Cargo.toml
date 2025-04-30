@@ -16,3 +16,6 @@ codegen-units = 1
 # unpack TickArray
 bincode = "1"
 default-boxed = "0.2.0"
+
+[patch.crates-io]
+anchor-syn = { git = "https://github.com/solana-foundation/anchor.git", rev = "54d5396" }
