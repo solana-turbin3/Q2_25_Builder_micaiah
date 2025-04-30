@@ -9,7 +9,7 @@ import { createMint, getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID, ASSOCI
 // - mint authority must be delegated to the config PDA *before* these tests run for deposit/convert to succeed.
 export const CN_MINT_ADDRESS = new PublicKey("LdV45HahKVpiVMdTCr6QFU8gK6uUqHRycpuGHkctAsn");
 export const PT_MINT_ADDRESS = new PublicKey("CZsQYCTjFcRHXVMibham5W8WKEeuQtTSARQreQ8KQ5ai");
-// export const COLLECTION_MINT_ADDRESS = new PublicKey("CollectionMintAddrReplaceWithActualPublicKey3");
+export const COLLECTION_MINT_ADDRESS = new PublicKey("CollectionMintAddrReplaceWithActualPublicKey3");
 
 export const METAPLEX_PID = new PublicKey("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
 
