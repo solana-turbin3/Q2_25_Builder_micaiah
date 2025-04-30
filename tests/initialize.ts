@@ -1,17 +1,21 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Program, Wallet } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
 import { assert, expect } from "chai";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
 import {
     CN_MINT_ADDRESS,
     PT_MINT_ADDRESS,
     COLLECTION_MINT_ADDRESS,
-    requestAirdrop
+    requestAirdrop,
+    sendAndConfirmTransaction,
+    initializeProtocol
 } from "./utils";
+import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+
 
 describe("initialize instruction (with hardcoded mints)", () => {
-    const provider = anchor.AnchorProvider.env();
+    const provider = anchor.AnchorProvider.local();
     anchor.setProvider(provider);
 
     const program = anchor.workspace.InvestInSol as Program<InvestInSol>;
@@ -51,11 +55,6 @@ describe("initialize instruction (with hardcoded mints)", () => {
          console.log(`derived Config PDA: ${configPda.toBase58()}`);
          console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
 
-        // important pre-requisite for testing against persistent environments:
-        // ensure the hardcoded mints exist and the initializer wallet has 
-        // delegated authority appropriately *before* running tests.
-        // the environment is clean, so we just need the mints to exist and have
-        // proper authority delegated.
     });
 
     it("initializes the protocol state", async () => {
@@ -72,23 +71,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
             console.warn("warn: accounts already exist before initialization test. state verification might be inaccurate if not the first run.");
         }
 
-
         console.log("calling initialize instruction...");
-
-        await program.methods
-            .initialize()
-            .accounts({
-                initializer: initializer.publicKey,
-                cnMint: cnMint,
-                ptMint: ptMint,
-                collectionMint: collectionMint,
-                config: configPda,
-                treasury: treasuryPda,
-                treasuryVault: treasuryPda,
-                systemProgram: SystemProgram.programId,
-            })
-            .signers([initializer.payer]) // sign with the wallet provider's keypair
-            .rpc({ commitment: "confirmed" });
+        // call the initialize instruction
+        await initializeProtocol(program, provider, initializer.payer, cnMint, ptMint, collectionMint, 10);
+        
         console.log("initialize instruction successful.");
 
         console.log("verifying initialized state...");
@@ -99,9 +85,9 @@ describe("initialize instruction (with hardcoded mints)", () => {
         assert.ok(configAccount.collectionMint.equals(collectionMint), "config Collection mint mismatch");
         assert.isNull(configAccount.fee, "config fee should be None initially");
         assert.isFalse(configAccount.locked, "config global lock should be false");
-        assert.isFalse(configAccount.depositLocked, "config deposit lock should be false");
-        assert.isFalse(configAccount.convertLocked, "config convert lock should be false");
-        assert.strictEqual(configAccount.configBump, configBump, "config bump mismatch");
+        assert.isTrue(configAccount.depositLocked, "config deposit lock should be true");
+        assert.isTrue(configAccount.convertLocked, "config convert lock should be true");
+        assert.strictEqual(configAccount.bump, configBump, "config bump mismatch");
 
         // verify treasury account
         const treasuryAccount = await program.account.treasury.fetch(treasuryPda);
@@ -122,21 +108,25 @@ describe("initialize instruction (with hardcoded mints)", () => {
      it("fails if called again", async () => {
          console.log("testing re-initialization failure...");
          try {
-             await program.methods
-                 .initialize()
-                 .accounts({
-                     initializer: initializer.publicKey,
-                     cnMint: cnMint,
-                     ptMint: ptMint,
-                     collectionMint: collectionMint,
-                     config: configPda,
-                     treasury: treasuryPda,
-                     treasuryVault: treasuryPda,
-                     systemProgram: SystemProgram.programId,
-                 })
-                 .signers([initializer.payer])
-                 .rpc({ commitment: "confirmed" });
-             assert.fail("initialize should fail if called again");
+            const tx = await program.methods.initialize(10)
+                .accountsStrict({
+                    initializer: initializer.publicKey,
+                    cnMint: cnMint,
+                    ptMint: ptMint,
+                    collectionMint: collectionMint,
+                    config: configPda,
+                    treasury: treasuryPda,
+                    systemProgram: SystemProgram.programId,
+                    tokenProgram: TOKEN_PROGRAM_ID,
+                })
+                .transaction();
+            await sendAndConfirmTransaction(
+                provider,
+                tx,
+                initializer.publicKey,
+                [initializer.payer],
+            );
+            assert.fail("initialize should fail if called again");
          } catch (err) {
              // expect an error because the accounts (config, treasury, vault) already exist
              // error might be "already in use" or a custom anchor error
