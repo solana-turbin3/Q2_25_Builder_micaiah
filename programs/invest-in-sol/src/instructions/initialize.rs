@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, Token2022};
+use anchor_spl::token_2022::Token2022;
+use anchor_spl::token_interface::Mint;
 
 use crate::state::{Config, Treasury};
 
@@ -8,13 +9,21 @@ pub struct Initialize<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
 
-    // --- pre-existing mints (authority delegated to config PDA before calling) ---
-    /// CHECK: CN Mint address, validation happens off-chain by ensuring authority is delegated.
-    pub cn_mint: UncheckedAccount<'info>,
-    /// CHECK: PT Mint address, validation happens off-chain by ensuring authority is delegated.
-    pub pt_mint: UncheckedAccount<'info>,
-    /// CHECK: NFT Collection Mint address, validation happens off-chain by ensuring authority is delegated.
-    pub collection_mint: UncheckedAccount<'info>,
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config
+    )]
+    pub cn_mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config
+    )]
+    pub pt_mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config
+    )]
+    pub collection_mint: InterfaceAccount<'info, Mint>,
 
     // --- PDAs & accounts to initialize ---
     #[account(
@@ -35,21 +44,9 @@ pub struct Initialize<'info> {
     )]
     pub treasury: Account<'info, Treasury>,
 
-    /// the vault account that will hold the SOL deposits.
-    /// owned by the treasury PDA.
-    #[account(
-        init,
-        payer = initializer,
-        seeds = [b"treasury_vault", treasury.key().as_ref()],
-        bump,
-        space = 8 // minimal space for a system account PDA owned by the program
-    )]
-    pub treasury_vault: SystemAccount<'info>, // anchor handles assigning ownership to the program
-
     // --- programs ---
     pub system_program: Program<'info, System>,
-    // we might need Token2022 later for minting, but not strictly for init
-    // pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token2022>,
 }
 
 impl<'info> Initialize<'info> {
@@ -79,7 +76,6 @@ impl<'info> Initialize<'info> {
         msg!("protocol initialized:");
         msg!("  config PDA: {}", config.key());
         msg!("  treasury PDA: {}", treasury.key());
-        msg!("  treasury Vault: {}", ctx.accounts.treasury_vault.key());
         msg!("  CN Mint: {}", config.cn_mint);
         msg!("  PT Mint: {}", config.pt_mint);
         msg!("  Collection Mint: {}", config.collection_mint);

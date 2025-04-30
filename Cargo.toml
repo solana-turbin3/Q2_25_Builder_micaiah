@@ -13,8 +13,6 @@ incremental = false
 codegen-units = 1
 
 [workspace.dependencies]
-# Attempt to pin solana-program to a version compatible with Anchor 0.30.1
-solana-program = "=1.18.18"
 # unpack TickArray
 bincode = "1"
 default-boxed = "0.2.0"
