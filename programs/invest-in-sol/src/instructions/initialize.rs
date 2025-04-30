@@ -59,8 +59,8 @@ impl<'info> Initialize<'info> {
         config.collection_mint = ctx.accounts.collection_mint.key();
         config.fee = None; // default to no fee
         config.locked = false; // default to unlocked
-        config.deposit_locked = false; // default deposit to unlocked
-        config.convert_locked = false; // default convert to unlocked
+        config.deposit_locked = true; // default deposit to locked
+        config.convert_locked = true; // default convert to locked
         config.config_bump = ctx.bumps.config;
 
         // initialize Treasury PDA

@@ -151,6 +151,12 @@ impl<'info> Deposit<'info> {
         system_program::transfer(cpi_ctx, amount)?;
         msg!("transferred {} SOL to treasury vault", amount);
 
+        // calculate nav and determine tokens to mint
+        let nav = ctx.accounts.treasury.calculate_nav()?;
+        // todo: add precision handling here. for now, nav=1 so amount/nav = amount
+        let tokens_to_mint = amount.checked_div(nav).ok_or(ProgramError::ArithmeticOverflow)?; // placeholder calculation
+        msg!("calculated nav: {}, tokens_to_mint: {}", nav, tokens_to_mint);
+
         // prepare PDA signer seeds
         let config_seeds = &[&b"config"[..], &[ctx.accounts.config.config_bump]];
         let signer_seeds = &[&config_seeds[..]];
@@ -166,8 +172,8 @@ impl<'info> Deposit<'info> {
             cpi_accounts_cn,
             signer_seeds,
         );
-        mint_to(cpi_ctx_cn, amount)?;
-        msg!("minted {} CN tokens to depositor", amount);
+        mint_to(cpi_ctx_cn, tokens_to_mint)?;
+        msg!("minted {} CN tokens to depositor", tokens_to_mint);
 
         // 3. mint PT tokens -> protocol_pt_ata
         let cpi_accounts_pt = MintTo {
@@ -180,8 +186,8 @@ impl<'info> Deposit<'info> {
             cpi_accounts_pt,
             signer_seeds,
         );
-        mint_to(cpi_ctx_pt, amount)?;
-        msg!("minted {} PT tokens to protocol ATA", amount);
+        mint_to(cpi_ctx_pt, tokens_to_mint)?;
+        msg!("minted {} PT tokens to protocol ATA", tokens_to_mint);
 
         // todo: implement NFT option
         // // 4. mint NFT Option (pNFT) using Metaplex MintV1
@@ -227,11 +233,11 @@ impl<'info> Deposit<'info> {
 
         // 5. initialize OptionData PDA
         let option_data = &mut ctx.accounts.option_data;
-        option_data.num_of_cn = amount;
+        option_data.num_of_cn = tokens_to_mint; // use calculated tokens
         option_data.bump = ctx.bumps.option_data;
-        msg!("initialized OptionData PDA for NFT with num_of_cn: {}", amount);
+        msg!("initialized OptionData PDA for NFT with num_of_cn: {}", tokens_to_mint);
 
-        // update Treasury state to track total deposits
+        // update Treasury state to track total *sol* deposits
         let treasury = &mut ctx.accounts.treasury;
         treasury.total_deposited_sol = treasury.total_deposited_sol.checked_add(amount).ok_or(ProgramError::ArithmeticOverflow)?;
 
