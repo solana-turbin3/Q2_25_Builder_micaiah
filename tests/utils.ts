@@ -215,6 +215,53 @@ export async function updateLocks(
   ]);
 }
 
+export async function deposit(
+  program: Program<InvestInSol>,
+  provider: anchor.AnchorProvider,
+  depositor: Keypair,
+  cnMint: PublicKey,
+  ptMint: PublicKey,
+  depositAmount: anchor.BN
+) {
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    program.programId
+  );
+  const [treasuryPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury")],
+    program.programId
+  );
+  const protocolPtAta = await anchor.utils.token.associatedAddress({
+    mint: ptMint,
+    owner: configPda,
+  });
+  const depositorCnAta = await anchor.utils.token.associatedAddress({
+    mint: cnMint,
+    owner: depositor.publicKey,
+  });
+
+  const tx = await program.methods
+    .deposit(depositAmount)
+    .accountsStrict({
+      depositor: depositor.publicKey,
+      depositorSolAccount: depositor.publicKey,
+      depositorCnAta: depositorCnAta,
+      config: configPda,
+      treasury: treasuryPda,
+      cnMint: cnMint,
+      ptMint: ptMint,
+      protocolPtAta: protocolPtAta,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+    })
+    .transaction();
+  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+    depositor,
+  ]);
+}
+
 /**
  * parses AnchorError from transaction error object.
  */
