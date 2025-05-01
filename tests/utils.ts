@@ -184,6 +184,37 @@ export async function initializeProtocol(
   return { configPda, treasuryPda };
 }
 
+export async function updateLocks(
+  program: Program<InvestInSol>,
+  provider: anchor.AnchorProvider,
+  initializer: Keypair,
+  configPda: PublicKey,
+  setLocked: boolean | null,
+  setDepositLocked: boolean | null,
+  setConvertLocked: boolean | null
+) {
+  console.log(`updating protocol (Config: ${configPda.toBase58()})...`);
+  if (setLocked !== null) {
+    console.log("Setting protocol locked state to:", setLocked);
+  }
+  if (setDepositLocked !== null) {
+    console.log("Setting deposit locked state to:", setDepositLocked);
+  }
+  if (setConvertLocked !== null) {
+    console.log("Setting convert locked state to:", setConvertLocked);
+  }
+  const tx = await program.methods
+    .updateLocks(setLocked, setDepositLocked, setConvertLocked)
+    .accountsStrict({
+      authority: initializer.publicKey,
+      config: configPda,
+    })
+    .transaction();
+  await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+    initializer,
+  ]);
+}
+
 /**
  * parses AnchorError from transaction error object.
  */
