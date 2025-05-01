@@ -1,5 +1,5 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Program, Wallet } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
 import { assert, expect } from "chai";
 import {
@@ -9,12 +9,10 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import {
-  getOrCreateAssociatedTokenAccount,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAccount,
-  TOKEN_2022_PROGRAM_ID,
-} from "@solana/spl-token"; // import token_2022_program_id
+} from "@solana/spl-token";
 import {
   CN_MINT_ADDRESS,
   PT_MINT_ADDRESS,
@@ -22,11 +20,14 @@ import {
   initializeProtocol,
   parseAnchorError,
   requestAirdrop,
+  updateLocks,
+  sendAndConfirmTransaction,
 } from "./utils";
 
-describe("deposit instruction (with hardcoded mints)", () => {
-  const provider = anchor.AnchorProvider.env();
+describe.only("deposit instruction (with hardcoded mints)", () => {
+  const provider = anchor.AnchorProvider.local();
   anchor.setProvider(provider);
+
   const program = anchor.workspace.InvestInSol as Program<InvestInSol>;
   const initializer = provider.wallet as Wallet; // use provider's wallet as initializer/authority
   const depositor = Keypair.generate(); // create a new depositor for tests
@@ -76,6 +77,15 @@ describe("deposit instruction (with hardcoded mints)", () => {
   });
 
   it("allows deposit when protocol is unlocked & verifies state changes", async () => {
+    await updateLocks(
+      program,
+      provider,
+      initializer.payer,
+      configPda,
+      false, // set globally unlocked
+      false, // set deposits unlocked
+      false // set converts unlocked
+    );
     const depositAmount = new anchor.BN(1 * LAMPORTS_PER_SOL); // 1 SOL
 
     // derive ATAs needed for this specific deposit
@@ -104,26 +114,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
     console.log("attempting deposit...");
     // execute deposit
-    const txSignature = await program.methods
-      .deposit(depositAmount)
-      .accounts({
-        depositor: depositor.publicKey,
-        depositorSolAccount: depositor.publicKey,
-        depositorCnAta: depositorCnAta,
-        config: configPda,
-        treasury: treasuryPda,
-        cnMint: cnMint,
-        ptMint: ptMint,
-        protocolPtAta: protocolPtAta,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-      })
-      .signers([depositor])
-      .rpc({ commitment: "confirmed" });
-
-    console.log("deposit successful:", txSignature);
+    await deposit(program, provider, depositor, cnMint, ptMint, depositAmount);
 
     // --- assertions ---
     console.log("verifying state changes...");
@@ -187,36 +178,28 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
   it("fails deposit when protocol is globally locked", async () => {
     console.log("testing global lock...");
-    await program.methods
-      .updateLocks(true, null, null)
-      .accounts({ authority: initializer.publicKey, config: configPda })
-      .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+    await updateLocks(
+      program,
+      provider,
+      initializer.payer,
+      configPda,
+      true, // set locked
+      false, // set deposits unlocked
+      false // set converts unlocked
+    );
 
     const depositAmount = new anchor.BN(0.1 * LAMPORTS_PER_SOL);
-    const depositorCnAta = await anchor.utils.token.associatedAddress({
-      mint: cnMint,
-      owner: depositor.publicKey,
-    });
 
     try {
-      await program.methods
-        .deposit(depositAmount)
-        .accounts({
-          depositor: depositor.publicKey,
-          depositorSolAccount: depositor.publicKey,
-          config: configPda,
-          treasury: treasuryPda,
-          cnMint,
-          ptMint,
-          protocolPtAta,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([depositor])
-        .rpc({ commitment: "confirmed" });
+      console.log("attempting deposit with global lock...");
+      await deposit(
+        program,
+        provider,
+        depositor,
+        cnMint,
+        ptMint,
+        depositAmount
+      );
       assert.fail("deposit should have failed due to global lock");
     } catch (err) {
       const anchorError = parseAnchorError(err);
@@ -226,48 +209,33 @@ describe("deposit instruction (with hardcoded mints)", () => {
         "ProtocolLocked",
         "error code mismatch (global lock)"
       );
-    } finally {
-      await program.methods
-        .updateLocks(false, null, null)
-        .accounts({ authority: initializer.publicKey, config: configPda })
-        .signers([initializer.payer])
-        .rpc({ commitment: "confirmed" });
-      console.log("global lock test finished.");
     }
   });
 
   it("fails deposit when deposits are locked (but protocol unlocked)", async () => {
     console.log("testing deposit lock...");
-    await program.methods
-      .updateLocks(null, true, null)
-      .accounts({ authority: initializer.publicKey, config: configPda })
-      .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+    await updateLocks(
+      program,
+      provider,
+      initializer.payer,
+      configPda,
+      false, // set global unlocked
+      true, // set deposits locked
+      false // set converts unlocked
+    );
 
     const depositAmount = new anchor.BN(0.1 * LAMPORTS_PER_SOL);
-    const depositorCnAta = await anchor.utils.token.associatedAddress({
-      mint: cnMint,
-      owner: depositor.publicKey,
-    });
 
     try {
-      await program.methods
-        .deposit(depositAmount)
-        .accounts({
-          depositor: depositor.publicKey,
-          depositorSolAccount: depositor.publicKey,
-          config: configPda,
-          treasury: treasuryPda,
-          cnMint,
-          ptMint,
-          protocolPtAta,
-          tokenProgram: TOKEN_2022_PROGRAM_ID,
-          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        })
-        .signers([depositor])
-        .rpc({ commitment: "confirmed" });
+      console.log("attempting deposit with deposits locked...");
+      await deposit(
+        program,
+        provider,
+        depositor,
+        cnMint,
+        ptMint,
+        depositAmount
+      );
       assert.fail("deposit should have failed due to deposit lock");
     } catch (err) {
       const anchorError = parseAnchorError(err);
@@ -277,13 +245,68 @@ describe("deposit instruction (with hardcoded mints)", () => {
         "DepositsLocked",
         "error code mismatch (deposit lock)"
       );
-    } finally {
-      await program.methods
-        .updateLocks(null, false, null)
-        .accounts({ authority: initializer.publicKey, config: configPda })
-        .signers([initializer.payer])
-        .rpc({ commitment: "confirmed" });
-      console.log("deposit lock test finished.");
     }
   });
+
+  after(async () => {
+    await updateLocks(
+      program,
+      provider,
+      initializer.payer,
+      configPda,
+      false,
+      false,
+      false
+    );
+    console.log(
+      "resetting protocol locks to unlocked state after deposit tests."
+    );
+  });
 });
+
+async function deposit(
+  program: Program<InvestInSol>,
+  provider: anchor.AnchorProvider,
+  depositor: Keypair,
+  cnMint: PublicKey,
+  ptMint: PublicKey,
+  depositAmount: anchor.BN
+) {
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    program.programId
+  );
+  const [treasuryPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury")],
+    program.programId
+  );
+  const protocolPtAta = await anchor.utils.token.associatedAddress({
+    mint: ptMint,
+    owner: configPda,
+  });
+  const depositorCnAta = await anchor.utils.token.associatedAddress({
+    mint: cnMint,
+    owner: depositor.publicKey,
+  });
+
+  const tx = await program.methods
+    .deposit(depositAmount)
+    .accountsStrict({
+      depositor: depositor.publicKey,
+      depositorSolAccount: depositor.publicKey,
+      depositorCnAta: depositorCnAta,
+      config: configPda,
+      treasury: treasuryPda,
+      cnMint: cnMint,
+      ptMint: ptMint,
+      protocolPtAta: protocolPtAta,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+    })
+    .transaction();
+  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+    depositor,
+  ]);
+}
