@@ -190,23 +190,23 @@ export async function initializeProtocol(
 export function parseAnchorError(err: any): anchor.AnchorError | null {
   if (err instanceof anchor.AnchorError) return err;
   // basic parsing attempt from logs (may need refinement)
-  const errorLogs = err.logs?.find((log: string) =>
+  const logs = err.transactionMessage?.split("\n") || err.logs || null;
+  const errorLogs = logs?.find((log: string) =>
     log.includes("Program log: AnchorError")
   );
+
   if (errorLogs) {
     try {
-      const parts = errorLogs.split("AnchorError occurred. Error Code: ");
-      if (parts.length > 1) {
-        const codeParts = parts[1].split(". Error Number:");
-        const errorCode = {
-          code: codeParts[0],
-          number: parseInt(codeParts[1]?.split(".")[0] || "0"),
-        };
-        const errorMessage = err.logs
-          ?.find((log: string) => log.includes("Program log: Error Message:"))
-          ?.split("Error Message: ")[1];
-        return { error: { errorCode, errorMessage } } as anchor.AnchorError; // cast for assertion usage
-      }
+      const parts = errorLogs.split(". Error Code: ");
+      const codeParts = parts[1]?.split(". Error Number: ") || [];
+      const errorCode = {
+        code: codeParts[0],
+        number: parseInt(codeParts[1]?.split(".")[0] || "0"),
+      };
+      const errorMessage = err.logs
+        ?.find((log: string) => log.includes("Program log: Error Message:"))
+        ?.split("Error Message: ")[1];
+      return { error: { errorCode, errorMessage } } as anchor.AnchorError; // cast for assertion usage
     } catch (parseError) {
       console.error("failed to parse AnchorError from logs:", parseError);
     }
