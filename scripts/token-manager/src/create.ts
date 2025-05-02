@@ -38,10 +38,10 @@ export async function createTokens() {
   };
 
   // calculate space for zHAUS *after* defining metadata
-  const zephyrHausMintLen = getMintLen([ExtensionType.MetadataPointer]);
-  const zephyrHausMetaLen = TYPE_SIZE + LENGTH_SIZE + pack(zephyrHausMetadata).length;
-  const zephyrHausTotalLen = zephyrHausMintLen + zephyrHausMetaLen;
-  const zephyrHausLamports = await connection.getMinimumBalanceForRentExemption(zephyrHausTotalLen);
+  const zephyrHausMintLen = getMintLen([ExtensionType.MetadataPointer]); 
+  const zephyrHausLamports = await connection.getMinimumBalanceForRentExemption(
+    zephyrHausMintLen
+  );
 
   // instructions for zHAUS
 
@@ -61,7 +61,7 @@ export async function createTokens() {
   const createAccountIx_zHAUS = SystemProgram.createAccount({
     fromPubkey: wallet.publicKey,
     newAccountPubkey: zephyrHausMint.publicKey,
-    space: zephyrHausTotalLen, // use total calculated space
+    space: zephyrHausMintLen, // use total calculated space
     lamports: zephyrHausLamports,
     programId: TOKEN_2022_PROGRAM_ID,
   });
