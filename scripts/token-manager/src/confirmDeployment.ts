@@ -7,7 +7,7 @@ import { connection, isValidPublicKey } from './utils';
 function getMetadataAddressFromMint(mintInfo: any): PublicKey | null {
     try {
         // The getMint function should return an object with extensions if TOKEN_2022_PROGRAM_ID is used
-        const metadataPointer = getMetadataPointerState(mintInfo); // Pass the parsed Mint object
+        const metadataPointer = getMetadataPointerState(mintInfo);
         return metadataPointer?.metadataAddress || null;
     } catch (error) {
         console.warn(`   Warning: Could not get metadata pointer state from mint info:`, error);
@@ -40,7 +40,7 @@ export async function confirmDeployment(mintAddresses: string[]) {
       console.log(`   Freeze Authority: ${mintInfo.freezeAuthority?.toString() || 'None'}`);
 
       // 2. Get Metadata Info using the parsed mintInfo
-      const metadataAddress = getMetadataAddressFromMint(mintInfo); // Use the helper with parsed mint
+      const metadataAddress = getMetadataAddressFromMint(mintInfo);
       if (metadataAddress) {
         console.log(`   Metadata Account: ${metadataAddress.toString()}`);
         const metadataAccountInfo = await connection.getAccountInfo(metadataAddress, 'confirmed');

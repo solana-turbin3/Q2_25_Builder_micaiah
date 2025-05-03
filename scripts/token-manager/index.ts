@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import yargs, { Argv, ArgumentsCamelCase } from 'yargs'; // Revert to import syntax
+import yargs, { Argv, ArgumentsCamelCase } from 'yargs';
 import { hideBin } from 'yargs/helpers';
+import { PublicKey } from '@solana/web3.js';
 import { createTokens } from './src/createTokens';
 import { createCollection } from './src/createCollection';
 import { revokeFreezeAuthority } from './src/revokeFreeze';
@@ -26,13 +27,34 @@ yargs(hideBin(process.argv))
     }
   )
   .command(
-    'create-collection',
+    'create-collection <programId> <zHausMint> <zBondMint>',
     'Create the Option collection for ZephyrHaus (zOption)',
-    (yargs: Argv) => { },
-    async (argv: ArgumentsCamelCase<{}>) => {
+    (yargs: Argv) => {
+      return yargs
+        .positional('programId', {
+          describe: 'The program ID for the InvestInSol program',
+          type: 'string',
+          demandOption: true,
+        })
+        .positional('zHausMint', {
+          describe: 'The public key of the zHAUS token mint',
+          type: 'string',
+          demandOption: true,
+        })
+        .positional('zBondMint', {
+          describe: 'The public key of the zBOND token mint',
+          type: 'string',
+          demandOption: true,
+        }) as Argv<{ programId: string; zHausMint: string; zBondMint: string }>;
+    },
+    async (argv: ArgumentsCamelCase<{ programId: string; zHausMint: string; zBondMint: string }>) => {
       console.log('Executing create collection command...');
+      console.log(`   Program ID: ${argv.programId}`);
+      console.log(`   zHAUS Mint: ${argv.zHausMint}`);
+      console.log(`   zBOND Mint: ${argv.zBondMint}`);
       try {
-        await createTokens();
+        const programIdPubKey = new PublicKey(argv.programId);
+        await createCollection(programIdPubKey, argv.zHausMint, argv.zBondMint);
         console.log('\nCreate collection command finished successfully.');
       } catch (error) {
         console.error('\nError during create-collection command:', error);
@@ -40,7 +62,6 @@ yargs(hideBin(process.argv))
       }
     }
   )
-  // Add types for revoke-freeze command
   .command(
     'revoke-freeze <mints...>',
     'Revoke freeze authority for the specified token mint addresses',
@@ -49,10 +70,9 @@ yargs(hideBin(process.argv))
         describe: 'List of mint addresses (space-separated)',
         type: 'string',
         demandOption: true,
-      }) as Argv<{ mints: string[] | string }>; // Add back type assertion
+      }) as Argv<{ mints: string[] | string }>;
     },
     async (argv: ArgumentsCamelCase<{ mints: string[] | string }>) => {
-      // Ensure mints is treated as an array even if only one is provided
       const mintAddresses = Array.isArray(argv.mints) ? argv.mints : [argv.mints];
       console.log(`Executing revoke-freeze command for mints: ${mintAddresses.join(', ')}`);
       try {
@@ -78,7 +98,7 @@ yargs(hideBin(process.argv))
           describe: 'List of mint addresses (space-separated)',
           type: 'string',
           demandOption: true,
-        }) as Argv<{ newAuthority: string; mints: string[] | string }>; // Add back type assertion
+        }) as Argv<{ newAuthority: string; mints: string[] | string }>;
     },
     async (argv: ArgumentsCamelCase<{ newAuthority: string; mints: string[] | string }>) => {
       const mintAddresses = Array.isArray(argv.mints) ? argv.mints : [argv.mints];
@@ -102,9 +122,9 @@ yargs(hideBin(process.argv))
         describe: 'List of the 3 mint addresses (space-separated)',
         type: 'string',
         demandOption: true,
-        // Add validation for exactly 3 mints if yargs supports it easily,
-        // otherwise handled in the function.
-      }) as Argv<{ mints: string[] | string }>; // Add back type assertion
+        // TODO: add validation for exactly 3 mints if yargs supports it easily,
+        // otherwise handled in the function
+      }) as Argv<{ mints: string[] | string }>;
     },
     async (argv: ArgumentsCamelCase<{ mints: string[] | string }>) => {
       const mintAddresses = Array.isArray(argv.mints) ? argv.mints : [argv.mints];

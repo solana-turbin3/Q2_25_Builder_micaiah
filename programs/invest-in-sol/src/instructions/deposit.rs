@@ -128,6 +128,16 @@ impl<'info> Deposit<'info> {
         mint_to(cpi_ctx_pt, tokens_to_mint)?;
         msg!("minted {} PT tokens to protocol ATA", tokens_to_mint);
 
+        // TODO: mint an nft and verify the collection
+
+        // createUpdateFieldInstruction({
+        //     programId: TOKEN_2022_PROGRAM_ID,
+        //     metadata: childMint,
+        //     updateAuthority: authorityPDA, // Your PDA signs this
+        //     field: 'collection_verified',
+        //     value: 'true'
+        //   });
+
         // update treasury state to track total sol deposits
         let treasury = &mut ctx.accounts.treasury;
         treasury.total_deposited_sol = treasury.total_deposited_sol.checked_add(amount).ok_or(ProgramError::ArithmeticOverflow)?;

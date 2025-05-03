@@ -18,13 +18,18 @@ import {
 } from '@solana/spl-token-metadata';
 import { connection, wallet, logSignature } from './utils';
 
-export async function createCollection(zHausMint: String, programId: PublicKey) {
+export async function createCollection(
+    programId: PublicKey,
+    zHausMintAddress: string,
+    zBondMintAddress: string
+) {
     /// ------------------------------------------------------------------------
     // create parent collection NFT (zOPTION)
     /// ------------------------------------------------------------------------
-    console.log('\n3. creating zHAUS option collection NFT...');
-    const zBondMint = Keypair.generate();
-    const optionNFTMint = zBondMint.publicKey;
+    console.log('\n1. creating zHAUS option collection NFT...');
+    // keypair for the new collection nft mint itself
+    const optionNFTMintKeypair = Keypair.generate();
+    const optionNFTMint = optionNFTMintKeypair.publicKey;
     
 
     // Derive PDA for program authority
@@ -45,9 +50,9 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
             ['is_collection', 'true'],
             ['collection_authority', authorityPDA.toString()],
             ['collection_authority_bump', authorityBump.toString()],
-            ['collection_verified_field', 'collection_verified'], // Field name to check verification
-            ['underlying_bond', zBondMint.toString()],
-            ['target_token', zHausMint.toString()],
+            ['collection_verified_field', 'collection_verified'], // field name to check verification
+            ['underlying_bond', zBondMintAddress], // use passed zBond mint
+            ['target_token', zHausMintAddress], // use passed zHaus Mint
             ['maturity', '365 days'],
             ['yield', '8.5%'],
             ['issueDate', new Date().toISOString()]
@@ -56,13 +61,13 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
 
     const optionNFTMintLen = getMintLen([
         ExtensionType.MetadataPointer,
-        ExtensionType.NonTransferable // Optional: prevents collection NFT from being transferred
+        // ExtensionType.NonTransferable // Optional: prevents collection NFT from being transferred
     ]);
     const optionNFTMetaLen = TYPE_SIZE + LENGTH_SIZE + pack(optionNFTMetadata).length;
     const optionNFTTotalLen = optionNFTMintLen + optionNFTMetaLen;
     const optionNFTLamports = await connection.getMinimumBalanceForRentExemption(optionNFTTotalLen);
 
-    // Instructions for collection NFT
+    // instructions for collection NFT
     const createAccountIx_zOPTION = SystemProgram.createAccount({
         fromPubkey: wallet.publicKey,
         newAccountPubkey: optionNFTMint,
@@ -79,7 +84,7 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
         optionNFTMint, 0, wallet.publicKey, authorityPDA, TOKEN_2022_PROGRAM_ID
     );
 
-    // // Add NonTransferable extension (optional)
+    // // add NonTransferable extension (do we use this?)
     // const nonTransferableIx = createInitializeNonTransferableMintInstruction(
     //     optionNFTMint, TOKEN_2022_PROGRAM_ID
     // );
@@ -87,7 +92,7 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
     const updateNameIx_zOPTION = createUpdateFieldInstruction({
         programId: TOKEN_2022_PROGRAM_ID,
         metadata: optionNFTMint,
-        updateAuthority: wallet.publicKey, // Initial update as wallet before transfer
+        updateAuthority: wallet.publicKey, // initial update as wallet before transfer
         field: 'name',
         value: optionNFTMetadata.name
     });
@@ -118,7 +123,7 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
         })
     );
 
-    // Transfer update authority to program PDA
+    // transfer update authority to program PDA
     const transferAuthorityIx = createSetAuthorityInstruction(
         optionNFTMint,
         wallet.publicKey,
@@ -128,7 +133,7 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
         TOKEN_2022_PROGRAM_ID
     );
 
-    // Transaction for zOPTION collection NFT
+    // transaction for zOPTION collection NFT
     const tx_zOPTION = new Transaction().add(
         createAccountIx_zOPTION,
         initializeMetadataPointerIx_zOPTION,
@@ -140,7 +145,8 @@ export async function createCollection(zHausMint: String, programId: PublicKey) 
         transferAuthorityIx
     );
 
-    const sig_zOPTION = await sendAndConfirmTransaction(connection, tx_zOPTION, [wallet, zBondMint]);
+    // sign with wallet and the new collection nft mint keypair
+    const sig_zOPTION = await sendAndConfirmTransaction(connection, tx_zOPTION, [wallet, optionNFTMintKeypair]);
     logSignature(sig_zOPTION);
     console.log(`   Collection NFT Initialized: ${optionNFTMint.toString()}`);
     console.log(`   Collection Authority PDA: ${authorityPDA.toString()}`);

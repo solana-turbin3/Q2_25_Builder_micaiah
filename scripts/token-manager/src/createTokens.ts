@@ -20,13 +20,13 @@ export async function createTokens() {
   console.log('Starting token creation process...');
   console.log(`Using wallet: ${wallet.publicKey.toString()}`);
 
-  console.log('\n1. Creating ZephyrHaus (zHAUS) token...');
-  const mint = Keypair.generate();
-  const zHausMint = mint;
+  console.log('\n1. creating zephyrhaus (zhaus) token...');
+  const zHausMintKeypair = Keypair.generate();
+  const zHausMint = zHausMintKeypair.publicKey;
 
   const zHausMetaData: TokenMetadata = {
     updateAuthority: wallet.publicKey,
-    mint: zHausMint.publicKey,
+    mint: zHausMint,
     name: 'ZephyrHaus',
     symbol: 'zHAUS',
     uri: '',
@@ -36,39 +36,39 @@ export async function createTokens() {
       ['twitter', 'https://x.com/zephyr_haus']
     ]
   };
-  // Size of metadata
+  // size of metadata
   const zHausMetadataLen = pack(zHausMetaData).length;
 
-  // Size of MetadataExtension 2 bytes for type, 2 bytes for length
+  // size of metadataextension 2 bytes for type, 2 bytes for length
   const metadataExtension = TYPE_SIZE + LENGTH_SIZE;
 
-  // Size of Mint Account with extension
-  const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+  // size of mint account with extension
+  const zHausMintLen = getMintLen([ExtensionType.MetadataPointer]);
 
-  // Minimum lamports required for Mint Account
-  const lamports = await connection.getMinimumBalanceForRentExemption(
-    mintLen + metadataExtension + zHausMetadataLen
+  // minimum lamports required for mint account
+  const zHausLamports = await connection.getMinimumBalanceForRentExemption(
+    zHausMintLen + metadataExtension + zHausMetadataLen
   );
 
   const createAccountIx_zHAUS = SystemProgram.createAccount({
     fromPubkey: wallet.publicKey,
-    newAccountPubkey: zHausMint.publicKey,
-    space: mintLen, // use total calculated space
-    lamports: lamports,
+    newAccountPubkey: zHausMint, // use public key directly
+    space: zHausMintLen, // use renamed space variable
+    lamports: zHausLamports, // use renamed lamports variable
     programId: TOKEN_2022_PROGRAM_ID,
   });
 
   const initializeMetadataPointerIx_zHAUS = createInitializeMetadataPointerInstruction(
-    zHausMint.publicKey, // mint associated 
+    zHausMint, // mint associated (use public key directly)
     wallet.publicKey, // authority to update pointer
-    zHausMint.publicKey,   // metadata address can be the mint itself
+    zHausMint,   // metadata address can be the mint itself (use public key directly)
     TOKEN_2022_PROGRAM_ID
   );
 
   // instruction to initialize the mint account
-  // GETTING INVALID ACCOUNT DATA HERE
+  // getting invalid account data here
   const initializeMintIx_zHAUS = createInitializeMintInstruction(
-    zHausMint.publicKey,
+    zHausMint, // use public key directly
     9, // decimals
     wallet.publicKey, // mint authority
     null, // freeze authority (optional, set to null if not needed)
@@ -79,9 +79,9 @@ export async function createTokens() {
   // this packs and writes the metadata into the space previously allocated.
   const initializeMetadataIx_zHAUS = createInitializeMetadataInstruction({
     programId: TOKEN_2022_PROGRAM_ID, // program id
-    metadata: zHausMint.publicKey, // account address where metadata is stored (the mint account)
+    metadata: zHausMint, // account address where metadata is stored (the mint account) (use public key directly)
     updateAuthority: wallet.publicKey, // metadata update authority
-    mint: zHausMint.publicKey, // mint associated
+    mint: zHausMint, // mint associated (use public key directly)
     mintAuthority: wallet.publicKey, // authority that can mint tokens
     name: zHausMetaData.name, // name from metadata object
     symbol: zHausMetaData.symbol, // symbol from metadata object
@@ -92,14 +92,12 @@ export async function createTokens() {
   const updateAdditionalMetaIx_zHAUS = zHausMetaData.additionalMetadata.map(([field, value]) =>
     createUpdateFieldInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
-      metadata: zHausMint.publicKey,
+      metadata: zHausMint, // use public key directly
       updateAuthority: wallet.publicKey,
       field,
       value,
     })
   );
-
-  console.log(updateAdditionalMetaIx_zHAUS);
 
   // ---------
 
@@ -114,19 +112,19 @@ export async function createTokens() {
 
   // add try/catch for better error visibility
   try {
-    const sig_zHAUS = await sendAndConfirmTransaction(connection, tx_zHAUS, [wallet, zHausMint], { commitment: 'confirmed' });
+    const sig_zHAUS = await sendAndConfirmTransaction(connection, tx_zHAUS, [wallet, zHausMintKeypair], { commitment: 'confirmed' });
     logSignature(sig_zHAUS);
-    console.log(`   zHAUS Mint & Metadata Initialized: ${zHausMint.publicKey.toString()}`);
+    console.log(`   zHAUS Mint & Metadata Initialized: ${zHausMint.toString()}`);
   } catch (error) {
-    console.error("error creating zHAUS token:", error);
+    console.error("error creating zhaus token:", error);
     // optionally re-throw or handle as needed
     throw error;
   }
 
   // / ------------------------------------------------------------------------
-  // 2. create zHAUS bond token (zBOND)
+  // 2. create zhaus bond token (zbond)
   // / ------------------------------------------------------------------------
-  console.log('\n2. creating zHAUS bond (zBOND) token...');
+  console.log('\n2. creating zhaus bond (zbond) token...');
   const zBondMintKeypair = Keypair.generate();
   const zBondMint = zBondMintKeypair.publicKey;
 
@@ -143,22 +141,24 @@ export async function createTokens() {
     ]
   };
 
-    // Size of metadata
-    const zBondMetadataLen = pack(zHausMetaData).length;
-    // Minimum lamports required for Mint Account
-    const zBondTotalLen = await connection.getMinimumBalanceForRentExemption(
-      mintLen + metadataExtension + zBondMetadataLen
-    );
+    // size of metadata
+    const zBondMetadataLen = pack(zBondMetadata).length; // fix: use zbondmetadata
 
-  // calculate space for zBOND *after* defining metadata
-  const zBondLamports = await connection.getMinimumBalanceForRentExemption(zBondTotalLen);
+    // size of mint account with extension
+    const zBondMintLen = getMintLen([ExtensionType.MetadataPointer]); // same extension as zhaus
 
-  // instructions for zBOND
+    // calculate required space for mint account + extensions + metadata
+    const zBondSpace = zBondMintLen + metadataExtension + zBondMetadataLen; // fix: calculate space correctly
+
+    // minimum lamports required for the calculated space
+    const zBondLamports = await connection.getMinimumBalanceForRentExemption(zBondSpace); // fix: calculate lamports based on correct space
+
+  // instructions for zbond
   const createAccountIx_zBond = SystemProgram.createAccount({
     fromPubkey: wallet.publicKey,
     newAccountPubkey: zBondMint,
-    space: zBondTotalLen,
-    lamports: zBondLamports,
+    space: zBondSpace, // fix: use correct space variable
+    lamports: zBondLamports, // fix: use correct lamports variable
     programId: TOKEN_2022_PROGRAM_ID,
   });
   
@@ -219,9 +219,9 @@ export async function createTokens() {
   console.log(`   zBOND Mint & Metadata Initialized: ${zBondMint.toString()}`);
 
 
-  console.log('\n===== Token Creation Summary =====');
+  console.log('\n===== token creation summary =====');
   console.log(`zHAUS Mint: ${zHausMint.toString()}`);
   console.log(`zBOND Mint: ${zBondMint.toString()}`);
-  console.log('\nToken creation process finished.');
+  console.log('\ntoken creation process finished.');
 }
 

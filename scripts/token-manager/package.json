@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "create": "node dist/index.js create",
+    "create-tokens": "node dist/index.js create-tokens",
+    "create-collection": "node dist/index.js create-collection",
     "revoke-freeze": "node dist/index.js revoke-freeze",
     "transfer": "node dist/index.js transfer-authorities",
     "confirm": "node dist/index.js confirm-deployment",
