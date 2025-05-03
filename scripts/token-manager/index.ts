@@ -35,26 +35,16 @@ yargs(hideBin(process.argv))
           describe: 'The program ID for the InvestInSol program',
           type: 'string',
           demandOption: true,
-        })
-        .positional('zHausMint', {
-          describe: 'The public key of the zHAUS token mint',
-          type: 'string',
-          demandOption: true,
-        })
-        .positional('zBondMint', {
-          describe: 'The public key of the zBOND token mint',
-          type: 'string',
-          demandOption: true,
-        }) as Argv<{ programId: string; zHausMint: string; zBondMint: string }>;
+        }) as Argv<{ programId: string; }>;
     },
-    async (argv: ArgumentsCamelCase<{ programId: string; zHausMint: string; zBondMint: string }>) => {
+    async (argv: ArgumentsCamelCase<{ programId: string; }>) => {
       console.log('Executing create collection command...');
       console.log(`   Program ID: ${argv.programId}`);
       console.log(`   zHAUS Mint: ${argv.zHausMint}`);
       console.log(`   zBOND Mint: ${argv.zBondMint}`);
       try {
         const programIdPubKey = new PublicKey(argv.programId);
-        await createCollection(programIdPubKey, argv.zHausMint, argv.zBondMint);
+        await createCollection(programIdPubKey);
         console.log('\nCreate collection command finished successfully.');
       } catch (error) {
         console.error('\nError during create-collection command:', error);

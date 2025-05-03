@@ -43,12 +43,22 @@ you can run the commands using `node dist/index.js <command>` or the yarn/npm sc
 creates the standard set of tokens (zHAUS, zBOND, zOPTION). this typically involves deploying new mints.
 
 ```bash
-node dist/index.js create
+node dist/index.js create-tokens
 # or 
-yarn create
+yarn create-tokens
 ```
 
-### 2. Revoke Freeze Authority
+### 2. Create NFT Collection (Parent NFT)
+
+creates the parent nft for program minted NFTs
+
+```bash
+node dist/index.js create-collection < program_id >
+# or 
+yarn create-collection < program_id >
+```
+
+### 3. Revoke Freeze Authority
 
 revokes the freeze authority for one or more specified token mints. this is often done after creation to decentralize control.
 
@@ -57,20 +67,18 @@ node dist/index.js revoke-freeze <mint1> <mint2> ...
 # or
 yarn revoke-freeze <mint1> <mint2> ...
 ```
-*replace `<mint1>`, `<mint2>`, etc. with the actual base58 mint addresses.*
 
-### 3. Transfer Mint/Update Authority
+### 4. Transfer Mint/Update Authority
 
-transfers the mint authority (and potentially update authority, depending on implementation in `src/transferAuthorities.ts`) for specified mints to a new public key.
+transfers the mint authority (and potentially update authority, depending on implementation in `src/transferAuthorities.ts`) for specified mints to a new public key. does only standard authorities.
 
 ```bash
 node dist/index.js transfer-authorities <newAuthority> <mint1> <mint2> ...
 # or
 yarn transfer <newAuthority> <mint1> <mint2> ...
 ```
-*replace `<newAuthority>` with the base58 public key of the new authority and `<mint1>`, `<mint2>`, etc. with the mint addresses.*
 
-### 4. Confirm Deployment
+### 5. Confirm Deployment
 
 fetches and displays details for the specified mint addresses to confirm their state after deployment or updates. it expects exactly three mint addresses (likely zHAUS, zBOND, zOPTION in order).
 
@@ -79,10 +87,9 @@ node dist/index.js confirm-deployment <mint1> <mint2> <mint3>
 # or
 yarn confirm <mint1> <mint2> <mint3>
 ```
-*replace `<mint1>`, `<mint2>`, `<mint3>` with the actual base58 mint addresses.*
 
 ## Development
 
 - source code is in `index.ts` and the `src/` directory.
 - uses `yargs` for command-line argument parsing.
-- uses `@solana/web3.js` and `@solana/spl-token` for interacting with the Solana blockchain.
+- uses `@solana/web3.js` and `@solana/spl-token` for interacting with the Solana blockchain

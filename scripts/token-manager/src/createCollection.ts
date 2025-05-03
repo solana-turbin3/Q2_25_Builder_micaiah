@@ -19,9 +19,7 @@ import {
 import { connection, wallet, logSignature } from './utils';
 
 export async function createCollection(
-    programId: PublicKey,
-    zHausMintAddress: string,
-    zBondMintAddress: string
+    programId: PublicKey
 ) {
     /// ------------------------------------------------------------------------
     // create parent collection NFT (zOPTION)
@@ -146,5 +144,5 @@ export async function createCollection(
     const sig_zOPTION = await sendAndConfirmTransaction(connection, tx_zOPTION, [wallet, zOptionMintKeypair]);
     logSignature(sig_zOPTION);
     console.log(`   Collection NFT Initialized: ${zOptionMint.toString()}`);
-    console.log(`   Collection Authority: ${wallet.publicKey}`);
+    console.log(`   Collection Authority: ${authorityPDA}`);
 }
