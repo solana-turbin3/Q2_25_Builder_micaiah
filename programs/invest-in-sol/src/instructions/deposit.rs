@@ -1,6 +1,7 @@
 use anchor_lang::{prelude::*, system_program};
 use anchor_spl::{
     associated_token::AssociatedToken,
+    token::Token,
     token_interface::{mint_to, Mint, MintTo, Token2022, TokenAccount},
 };
 
@@ -63,7 +64,7 @@ pub struct Deposit<'info> {
     pub protocol_pt_ata: InterfaceAccount<'info, TokenAccount>,
 
     // programs
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>, // needed for init_if_needed
@@ -73,7 +74,10 @@ impl<'info> Deposit<'info> {
     pub fn handler(ctx: Context<Deposit>, amount: u64) -> Result<()> {
         // check locks first
         require!(!ctx.accounts.config.locked, DepositError::ProtocolLocked);
-        require!(!ctx.accounts.config.deposit_locked, DepositError::DepositsLocked);
+        require!(
+            !ctx.accounts.config.deposit_locked,
+            DepositError::DepositsLocked
+        );
 
         require!(amount > 0, DepositError::ZeroAmount);
 
@@ -92,8 +96,14 @@ impl<'info> Deposit<'info> {
         // calculate nav and determine tokens to mint
         let nav = ctx.accounts.treasury.calculate_nav()?;
         // todo: add precision handling here. for now, nav=1 so amount/nav = amount
-        let tokens_to_mint = amount.checked_div(nav).ok_or(ProgramError::ArithmeticOverflow)?; // placeholder calculation
-        msg!("calculated nav: {}, tokens_to_mint: {}", nav, tokens_to_mint);
+        let tokens_to_mint = amount
+            .checked_div(nav)
+            .ok_or(ProgramError::ArithmeticOverflow)?; // placeholder calculation
+        msg!(
+            "calculated nav: {}, tokens_to_mint: {}",
+            nav,
+            tokens_to_mint
+        );
 
         // prepare PDA signer seeds using helper
         let bump_seed = [ctx.accounts.config.bump];
@@ -130,7 +140,10 @@ impl<'info> Deposit<'info> {
 
         // update treasury state to track total sol deposits
         let treasury = &mut ctx.accounts.treasury;
-        treasury.total_deposited_sol = treasury.total_deposited_sol.checked_add(amount).ok_or(ProgramError::ArithmeticOverflow)?;
+        treasury.total_deposited_sol = treasury
+            .total_deposited_sol
+            .checked_add(amount)
+            .ok_or(ProgramError::ArithmeticOverflow)?;
 
         Ok(())
     }

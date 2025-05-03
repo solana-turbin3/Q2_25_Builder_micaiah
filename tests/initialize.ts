@@ -23,6 +23,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
   const collectionMint = COLLECTION_MINT_ADDRESS;
+  const optionDurationSeconds = 60 * 60 * 24 * 7; // 7 days default for this test
 
   // PDAs to be derived
   let configPda: PublicKey;
@@ -88,7 +89,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
       cnMint,
       ptMint,
       collectionMint,
-      10
+      optionDurationSeconds
     );
 
     console.log("initialize instruction successful.");
@@ -158,7 +159,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     console.log("testing re-initialization failure...");
     try {
       const tx = await program.methods
-        .initialize(10)
+        .initialize(optionDurationSeconds)
         .accountsStrict({
           initializer: initializer.publicKey,
           cnMint: cnMint,

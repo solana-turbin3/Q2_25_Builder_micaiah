@@ -184,29 +184,107 @@ export async function initializeProtocol(
   return { configPda, treasuryPda };
 }
 
+export async function updateLocks(
+  program: Program<InvestInSol>,
+  provider: anchor.AnchorProvider,
+  initializer: Keypair,
+  configPda: PublicKey,
+  setLocked: boolean | null,
+  setDepositLocked: boolean | null,
+  setConvertLocked: boolean | null
+) {
+  console.log(`updating protocol (Config: ${configPda.toBase58()})...`);
+  if (setLocked !== null) {
+    console.log("Setting protocol locked state to:", setLocked);
+  }
+  if (setDepositLocked !== null) {
+    console.log("Setting deposit locked state to:", setDepositLocked);
+  }
+  if (setConvertLocked !== null) {
+    console.log("Setting convert locked state to:", setConvertLocked);
+  }
+  const tx = await program.methods
+    .updateLocks(setLocked, setDepositLocked, setConvertLocked)
+    .accountsStrict({
+      authority: initializer.publicKey,
+      config: configPda,
+    })
+    .transaction();
+  await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+    initializer,
+  ]);
+}
+
+export async function deposit(
+  program: Program<InvestInSol>,
+  provider: anchor.AnchorProvider,
+  depositor: Keypair,
+  cnMint: PublicKey,
+  ptMint: PublicKey,
+  depositAmount: anchor.BN
+) {
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("config")],
+    program.programId
+  );
+  const [treasuryPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("treasury")],
+    program.programId
+  );
+  const protocolPtAta = await anchor.utils.token.associatedAddress({
+    mint: ptMint,
+    owner: configPda,
+  });
+  const depositorCnAta = await anchor.utils.token.associatedAddress({
+    mint: cnMint,
+    owner: depositor.publicKey,
+  });
+
+  const tx = await program.methods
+    .deposit(depositAmount)
+    .accountsStrict({
+      depositor: depositor.publicKey,
+      depositorSolAccount: depositor.publicKey,
+      depositorCnAta: depositorCnAta,
+      config: configPda,
+      treasury: treasuryPda,
+      cnMint: cnMint,
+      ptMint: ptMint,
+      protocolPtAta: protocolPtAta,
+      tokenProgram: TOKEN_PROGRAM_ID,
+      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
+      systemProgram: SystemProgram.programId,
+      rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+    })
+    .transaction();
+  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+    depositor,
+  ]);
+}
+
 /**
  * parses AnchorError from transaction error object.
  */
 export function parseAnchorError(err: any): anchor.AnchorError | null {
   if (err instanceof anchor.AnchorError) return err;
   // basic parsing attempt from logs (may need refinement)
-  const errorLogs = err.logs?.find((log: string) =>
+  const logs = err.transactionMessage?.split("\n") || err.logs || null;
+  const errorLogs = logs?.find((log: string) =>
     log.includes("Program log: AnchorError")
   );
+
   if (errorLogs) {
     try {
-      const parts = errorLogs.split("AnchorError occurred. Error Code: ");
-      if (parts.length > 1) {
-        const codeParts = parts[1].split(". Error Number:");
-        const errorCode = {
-          code: codeParts[0],
-          number: parseInt(codeParts[1]?.split(".")[0] || "0"),
-        };
-        const errorMessage = err.logs
-          ?.find((log: string) => log.includes("Program log: Error Message:"))
-          ?.split("Error Message: ")[1];
-        return { error: { errorCode, errorMessage } } as anchor.AnchorError; // cast for assertion usage
-      }
+      const parts = errorLogs.split(". Error Code: ");
+      const codeParts = parts[1]?.split(". Error Number: ") || [];
+      const errorCode = {
+        code: codeParts[0],
+        number: parseInt(codeParts[1]?.split(".")[0] || "0"),
+      };
+      const errorMessage = err.logs
+        ?.find((log: string) => log.includes("Program log: Error Message:"))
+        ?.split("Error Message: ")[1];
+      return { error: { errorCode, errorMessage } } as anchor.AnchorError; // cast for assertion usage
     } catch (parseError) {
       console.error("failed to parse AnchorError from logs:", parseError);
     }
