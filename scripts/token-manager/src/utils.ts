@@ -39,7 +39,7 @@ export const wallet = loadWallet();
 
 // helper function for logging signatures
 export function logSignature(signature: string) {
-    console.log(`✅ Transaction successful: https://explorer.solana.com/tx/${signature}?cluster=${network}`);
+    console.log(`✅ Transaction successful: https://solscan.io/tx/${signature}?cluster=${network}`);
 }
 
 // helper function to validate public key strings
