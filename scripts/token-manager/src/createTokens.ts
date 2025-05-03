@@ -39,7 +39,7 @@ export async function createTokens() {
   // size of metadata
   const zHausMetadataLen = pack(zHausMetaData).length;
 
-  // size of metadataextension 2 bytes for type, 2 bytes for length
+  // size of MetadataExtension 2 bytes for type, 2 bytes for length
   const metadataExtension = TYPE_SIZE + LENGTH_SIZE;
 
   // size of mint account with extension
@@ -65,17 +65,7 @@ export async function createTokens() {
     TOKEN_2022_PROGRAM_ID
   );
 
-  // instruction to initialize the mint account
-  // getting invalid account data here
-  const initializeMintIx_zHAUS = createInitializeMintInstruction(
-    zHausMint,
-    9, // decimals
-    wallet.publicKey, // mint authority
-    null, // freeze authority (optional, set to null if not needed)
-    TOKEN_2022_PROGRAM_ID
-  );
-
-  // instruction to initialize the metadata fields in the account
+   // instruction to initialize the metadata fields in the account
   // this packs and writes the metadata into the space previously allocated.
   const initializeMetadataIx_zHAUS = createInitializeMetadataInstruction({
     programId: TOKEN_2022_PROGRAM_ID, // program id
@@ -87,6 +77,16 @@ export async function createTokens() {
     symbol: zHausMetaData.symbol, // symbol from metadata object
     uri: zHausMetaData.uri, // uri from metadata object
   });
+
+  // instruction to initialize the mint account
+  // getting invalid account data here
+  const initializeMintIx_zHAUS = createInitializeMintInstruction(
+    zHausMint,
+    9, // decimals
+    wallet.publicKey, // mint authority
+    null, // freeze authority (optional, set to null if not needed)
+    TOKEN_2022_PROGRAM_ID
+  );
 
   // instructions to add the additional metadata fields
   const updateAdditionalMetaIx_zHAUS = zHausMetaData.additionalMetadata.map(([field, value]) =>
