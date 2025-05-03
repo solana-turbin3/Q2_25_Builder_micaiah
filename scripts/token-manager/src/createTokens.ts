@@ -52,23 +52,23 @@ export async function createTokens() {
 
   const createAccountIx_zHAUS = SystemProgram.createAccount({
     fromPubkey: wallet.publicKey,
-    newAccountPubkey: zHausMint, // use public key directly
-    space: zHausMintLen, // use renamed space variable
-    lamports: zHausLamports, // use renamed lamports variable
+    newAccountPubkey: zHausMint,
+    space: zHausMintLen,
+    lamports: zHausLamports,
     programId: TOKEN_2022_PROGRAM_ID,
   });
 
   const initializeMetadataPointerIx_zHAUS = createInitializeMetadataPointerInstruction(
-    zHausMint, // mint associated (use public key directly)
-    wallet.publicKey, // authority to update pointer
-    zHausMint,   // metadata address can be the mint itself (use public key directly)
+    zHausMint,
+    wallet.publicKey,
+    zHausMint,
     TOKEN_2022_PROGRAM_ID
   );
 
   // instruction to initialize the mint account
   // getting invalid account data here
   const initializeMintIx_zHAUS = createInitializeMintInstruction(
-    zHausMint, // use public key directly
+    zHausMint,
     9, // decimals
     wallet.publicKey, // mint authority
     null, // freeze authority (optional, set to null if not needed)
@@ -92,7 +92,7 @@ export async function createTokens() {
   const updateAdditionalMetaIx_zHAUS = zHausMetaData.additionalMetadata.map(([field, value]) =>
     createUpdateFieldInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
-      metadata: zHausMint, // use public key directly
+      metadata: zHausMint,
       updateAuthority: wallet.publicKey,
       field,
       value,
@@ -153,23 +153,23 @@ export async function createTokens() {
 
   const createAccountIx_zBond = SystemProgram.createAccount({
     fromPubkey: wallet.publicKey,
-    newAccountPubkey: zBondMint, // use public key directly
-    space: zBondMintLen, // use renamed space variable
-    lamports: zBondLamports, // use renamed lamports variable
+    newAccountPubkey: zBondMint,
+    space: zBondMintLen,
+    lamports: zBondLamports,
     programId: TOKEN_2022_PROGRAM_ID,
   });
 
   const initializeMetadataPointerIx_zBond = createInitializeMetadataPointerInstruction(
-    zBondMint, // mint associated (use public key directly)
-    wallet.publicKey, // authority to update pointer
-    zBondMint,   // metadata address can be the mint itself (use public key directly)
+    zBondMint,
+    wallet.publicKey,
+    zBondMint,
     TOKEN_2022_PROGRAM_ID
   );
 
   // instruction to initialize the mint account
   // getting invalid account data here
   const initializeMintIx_zBond = createInitializeMintInstruction(
-    zBondMint, // use public key directly
+    zBondMint,
     9, // decimals
     wallet.publicKey, // mint authority
     null, // freeze authority (optional, set to null if not needed)
@@ -182,7 +182,7 @@ export async function createTokens() {
     programId: TOKEN_2022_PROGRAM_ID, // program id
     metadata: zBondMint, // account address where metadata is stored (the mint account) (use public key directly)
     updateAuthority: wallet.publicKey, // metadata update authority
-    mint: zBondMint, // mint associated (use public key directly)
+    mint: zBondMint,
     mintAuthority: wallet.publicKey, // authority that can mint tokens
     name: zBondMetaData.name, // name from metadata object
     symbol: zBondMetaData.symbol, // symbol from metadata object
@@ -193,7 +193,7 @@ export async function createTokens() {
   const updateAdditionalMetaIx_zBond = zBondMetaData.additionalMetadata.map(([field, value]) =>
     createUpdateFieldInstruction({
       programId: TOKEN_2022_PROGRAM_ID,
-      metadata: zBondMint, // use public key directly
+      metadata: zBondMint,
       updateAuthority: wallet.publicKey,
       field,
       value,
