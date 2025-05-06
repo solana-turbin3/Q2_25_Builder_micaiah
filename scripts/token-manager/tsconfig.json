@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020", // Target modern Node.js versions
+    "module": "CommonJS", // Use CommonJS modules, standard for Node.js
+    "outDir": "./dist", // Output directory for compiled JS
+    "rootDir": "./", // Root directory of source files (includes index.ts and src/)
+    "strict": true, // Enable strict type checking
+    "esModuleInterop": true, // Allows default imports from CommonJS modules
+    "skipLibCheck": true, // Skip type checking of declaration files (speeds up compilation)
+    "forceConsistentCasingInFileNames": true, // Ensure consistent file casing
+    "resolveJsonModule": true, // Allow importing JSON files
+    "moduleResolution": "node", // Revert to default Node.js module resolution
+    "declaration": true, // Generate corresponding '.d.ts' file (optional but good practice)
+    "sourceMap": true // Generate source maps for debugging (optional)
+  },
+  "include": [
+    "index.ts", // Include the main entry point
+    "src/**/*.ts" // Include all .ts files in the src directory
+  ],
+  "exclude": [
+    "node_modules", // Exclude node_modules
+    "dist" // Exclude the output directory
+  ]
+}
