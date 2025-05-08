@@ -249,6 +249,7 @@ export async function deposit(
     TOKEN_2022_PROGRAM_ID
   );
   const optionMetadataAccount = findMetadataPda(optionMint);
+  const optionMasterEdition = findMasterEditionPda(optionMint);
   const collectionMasterEdition = findMasterEditionPda(collectionMint);
   const collectionMetadata = findMetadataPda(collectionMint);
 
@@ -303,6 +304,7 @@ export async function deposit(
     collectionMetadata,
     collectionMasterEdition,
     optionData,
+    optionMasterEdition,
     tokenProgram: TOKEN_2022_PROGRAM_ID,
     associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
     systemProgram: SystemProgram.programId,

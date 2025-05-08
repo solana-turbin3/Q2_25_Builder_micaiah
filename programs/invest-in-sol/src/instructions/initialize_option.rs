@@ -1,12 +1,11 @@
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::{
     associated_token::AssociatedToken,
-    metadata::{set_and_verify_sized_collection_item, SetAndVerifySizedCollectionItem},
     token_interface::{mint_to, Mint, MintTo, Token2022, TokenAccount},
 };
 use mpl_token_metadata::{
     accounts::{MasterEdition, Metadata},
-    instructions::CreateV1CpiBuilder,
+    instructions::{CreateV1CpiBuilder, VerifyCollectionV1CpiBuilder},
     types::{Creator, PrintSupply},
     ID as MPL_TOKEN_METADATA_ID,
 };
@@ -58,6 +57,13 @@ pub struct InitializeOption<'info> {
     )]
     pub option_metadata_account: UncheckedAccount<'info>,
 
+    /// CHECK: checked in constraints and CPI
+    #[account(
+        mut,
+        address = MasterEdition::find_pda(&option_mint.key()).0 @ ErrorCode::AddressMismatch,
+    )]
+    pub option_master_edition: UncheckedAccount<'info>,
+
     // --- collection accounts ---
     /// CHECK: checked in constraints and CPI
     #[account(
@@ -74,6 +80,7 @@ pub struct InitializeOption<'info> {
 
     /// CHECK: checked in constraints and CPI
     #[account(
+        mut,
         address = MasterEdition::find_pda(&collection_mint.key()).0 @ ErrorCode::AddressMismatch,
     )]
     pub collection_master_edition: UncheckedAccount<'info>,
@@ -163,9 +170,8 @@ impl<'info> InitializeOption<'info> {
             .update_authority(&ctx.accounts.config.to_account_info(), true)
             .system_program(&ctx.accounts.system_program.to_account_info())
             .payer(&ctx.accounts.depositor.to_account_info())
-            .master_edition(Some(
-                &ctx.accounts.collection_master_edition.to_account_info(),
-            ))
+            .master_edition(Some(&ctx.accounts.option_master_edition.to_account_info()))
+            .spl_token_program(Some(&ctx.accounts.token_program.to_account_info()))
             .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
             .name("zOption".into()) // using the updated name
             .symbol("zOption".into()) // using the updated symbol
@@ -182,35 +188,25 @@ impl<'info> InitializeOption<'info> {
         Ok(expiration)
     }
 
-    pub fn initialize_collection(ctx: &Context<InitializeOption>) -> Result<()> {
+    pub fn verify_mint_with_collection(ctx: &Context<InitializeOption>) -> Result<()> {
         let config_bump = ctx.accounts.config.bump;
-        // PDA seeds using helper and longer-lived binding for bump
         let bump_seed = [config_bump];
-        let config_seeds_with_bump = Config::get_seeds_with_bump(&bump_seed);
-        let signer_seeds = &[&config_seeds_with_bump[..]];
+        let config_seeds = Config::get_seeds_with_bump(&bump_seed);
 
         // 3. set and verify collection item
         msg!("setting and verifying collection item");
-        set_and_verify_sized_collection_item(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_metadata_program.to_account_info(),
-                SetAndVerifySizedCollectionItem {
-                    metadata: ctx.accounts.option_metadata_account.to_account_info(), // the metadata of the NFT being verified
-                    collection_authority: ctx.accounts.config.to_account_info(), // the authority signing (update authority of the NFT)
-                    payer: ctx.accounts.depositor.to_account_info(), // payer for potential rent
-                    update_authority: ctx.accounts.config.to_account_info(), // the NFT's update authority (often same as collection_authority)
-                    collection_mint: ctx.accounts.collection_mint.to_account_info(), // the collection NFT's mint
-                    collection_metadata: ctx.accounts.collection_metadata.to_account_info(), // the collection NFT's metadata account (corrected field name)
-                    collection_master_edition: ctx
-                        .accounts
-                        .collection_master_edition
-                        .to_account_info(), // the collection NFT's master edition account (corrected field name)
-                                            // collection_authority_record: none, // optional: for pNFT delegate auth record
-                },
-                signer_seeds, // config PDA signs as update authority
-            ),
-            None, // collection_authority_record (pNFTs)
-        )?;
+        VerifyCollectionV1CpiBuilder::new(&ctx.accounts.token_metadata_program.to_account_info())
+            .metadata(&ctx.accounts.option_metadata_account.to_account_info())
+            .authority(&ctx.accounts.config.to_account_info())
+            .collection_mint(&ctx.accounts.collection_mint.to_account_info())
+            .collection_master_edition(Some(
+                &ctx.accounts.collection_master_edition.to_account_info(),
+            ))
+            .collection_metadata(Some(&ctx.accounts.collection_metadata.to_account_info()))
+            .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
+            .system_program(&ctx.accounts.system_program.to_account_info())
+            .invoke_signed(&[&config_seeds[..]])?;
+
         Ok(())
     }
 

@@ -34,7 +34,7 @@ pub mod invest_in_sol {
         InitializeOption::verify_receipt(&ctx)?;
         InitializeOption::mint_option_to_depositor(&ctx)?;
         InitializeOption::create_option_metadata_account(&ctx)?;
-        InitializeOption::initialize_collection(&ctx)?;
+        InitializeOption::verify_mint_with_collection(&ctx)?;
         InitializeOption::set_option_data(&mut ctx)?;
         InitializeOption::increment_config_option_count(&mut ctx)?;
         InitializeOption::update_deposit_receipt(&mut ctx)?;
