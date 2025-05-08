@@ -93,12 +93,13 @@ export async function initializeProtocol(
   const configInfo = await provider.connection.getAccountInfo(configPda);
 
   if (configInfo === null) {
+    console.log("getting mint account for CN mint...", cnMintPk.toBase58());
     // make sure our config is the authority for the mints
     let cnMintAccount = await getMint(
       provider.connection,
       cnMintPk,
       "confirmed",
-      TOKEN_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID
     );
     if (cnMintAccount.mintAuthority.toBase58() !== configPda.toBase58()) {
       const tx = new Transaction().add(
@@ -108,7 +109,7 @@ export async function initializeProtocol(
           AuthorityType.MintTokens,
           configPda,
           [],
-          TOKEN_PROGRAM_ID
+          TOKEN_2022_PROGRAM_ID
         )
       );
       const sig = await provider.connection.sendTransaction(tx, [initializer], {
@@ -121,7 +122,7 @@ export async function initializeProtocol(
       provider.connection,
       ptMintPk,
       "confirmed",
-      TOKEN_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID
     );
     if (ptMintAccount.mintAuthority.toBase58() !== configPda.toBase58()) {
       const tx = new Transaction().add(
@@ -131,7 +132,7 @@ export async function initializeProtocol(
           AuthorityType.MintTokens,
           configPda,
           [],
-          TOKEN_PROGRAM_ID
+          TOKEN_2022_PROGRAM_ID
         )
       );
       const sig = await provider.connection.sendTransaction(tx, [initializer]);
@@ -142,7 +143,7 @@ export async function initializeProtocol(
       provider.connection,
       collectionMintPk,
       "confirmed",
-      TOKEN_PROGRAM_ID
+      TOKEN_2022_PROGRAM_ID
     );
     if (
       collectionMintAccount.mintAuthority.toBase58() !== configPda.toBase58()
@@ -154,7 +155,7 @@ export async function initializeProtocol(
           AuthorityType.MintTokens,
           configPda,
           [],
-          TOKEN_PROGRAM_ID
+          TOKEN_2022_PROGRAM_ID
         )
       );
       const sig = await provider.connection.sendTransaction(tx, [initializer]);
@@ -172,7 +173,7 @@ export async function initializeProtocol(
         config: configPda,
         treasury: treasuryPda,
         systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
+        tokenProgram: TOKEN_2022_PROGRAM_ID,
       })
       .transaction();
     await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
@@ -306,10 +307,8 @@ export async function sendAndConfirmTransaction(
   for (const signer of signers) {
     transaction.partialSign(signer);
   }
-  const sig = await provider.connection.sendRawTransaction(
-    await transaction.serialize(),
-    options
-  );
+  const tx = await transaction.serialize();
+  const sig = await provider.connection.sendRawTransaction(tx, options);
   await confirmTransaction(provider, sig);
 }
 
