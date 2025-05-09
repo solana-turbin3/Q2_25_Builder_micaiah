@@ -67,6 +67,7 @@ pub struct InitializeOption<'info> {
     // --- collection accounts ---
     /// CHECK: checked in constraints and CPI
     #[account(
+        mut,
         address = config.collection_mint @ ErrorCode::AddressMismatch,
     )]
     pub collection_mint: UncheckedAccount<'info>, // read-only, just need the key
@@ -202,7 +203,7 @@ impl<'info> InitializeOption<'info> {
             .collection_master_edition(Some(
                 &ctx.accounts.collection_master_edition.to_account_info(),
             ))
-            .collection_metadata(Some(&ctx.accounts.collection_metadata.to_account_info()))
+            .collection_metadata(Some(&ctx.accounts.collection_mint.to_account_info()))
             .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
             .system_program(&ctx.accounts.system_program.to_account_info())
             .invoke_signed(&[&config_seeds[..]])?;
