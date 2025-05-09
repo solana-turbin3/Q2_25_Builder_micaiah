@@ -11,13 +11,14 @@ import {
   signerIdentity,
   createSignerFromKeypair,
   keypairIdentity,
-  publicKey as umiPublicKey
+  publicKey as umiPublicKey,
 } from '@metaplex-foundation/umi'
 import {
   createV1,
-  TokenStandard,
+  mintV1,
+  TokenStandard
 } from '@metaplex-foundation/mpl-token-metadata';
-
+import {TOKEN_PROGRAM_ID} from "@solana/spl-token";
 import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
 
 const umi = createUmi("https://api.devnet.solana.com");
@@ -72,7 +73,12 @@ export async function createCollection(
         isCollection: true
     }).sendAndConfirm(umi);
 
-    console.log("✅ Transaction successful.")
+    console.log("✅ Collection creation transaction successful.")
+
+    // mintV1(umi, {
+    //   mint: mintKeypair.publicKey,
+    //   tokenStandard: TokenStandard.NonFungible
+    // })
 
     // The PDA is already set as the update authority in the createV1 call
     console.log('\n2. Authority information:');
