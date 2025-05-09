@@ -57,7 +57,7 @@ export async function createCollection(
       Buffer.from("config")
     ]);
     
-    console.log(`Authority PDA from UMI: ${authorityPda[0].toString()}`);
+    console.log(`Config PDA from UMI: ${authorityPda[0].toString()}`);
     // this sets the collection to being a collection, we need to call VerifyCollectionV1 on initialization
     // to make a call where config pda signs the master nft to verify it
     const signature = await createV1(umi, {
@@ -71,13 +71,12 @@ export async function createCollection(
         tokenStandard: TokenStandard.NonFungible,
         isCollection: true
     }).sendAndConfirm(umi);
-    
-    // Convert the transaction signature to a string
-    logSignature(signature.signature.toString());
+
+    console.log("✅ Transaction successful.")
 
     // The PDA is already set as the update authority in the createV1 call
     console.log('\n2. Authority information:');
     console.log(`   Collection NFT Initialized: ${mintSigner.publicKey.toString()}`);
-    console.log(`   Update Authority (PDA): ${payer.toString()}`);
+    console.log(`   Update Authority (PDA): ${payer.publicKey.toString()}`);
     console.log(`   Config PDA: ${authorityPDA.toString()}`);
 }
