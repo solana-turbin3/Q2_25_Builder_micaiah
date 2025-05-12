@@ -1,7 +1,8 @@
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_interface::{mint_to, Mint, MintTo, Token2022, TokenAccount},
+    token::Token,
+    token_interface::{mint_to, Mint, MintTo, TokenAccount},
 };
 use mpl_token_metadata::{
     accounts::{MasterEdition, Metadata},
@@ -64,7 +65,28 @@ pub struct InitializeOption<'info> {
     )]
     pub option_master_edition: UncheckedAccount<'info>,
 
-    // --- collection accounts ---
+    // --- main collection accounts ---
+    #[account(
+        init_if_needed,
+        payer = depositor,
+        seeds = [Config::SEED_PREFIX, b"main_collection_mint_v1"],
+        bump,
+        mint::decimals = 0,
+        mint::authority = config,
+        mint::freeze_authority = config,
+        token::token_program = token_program,
+    )]
+    pub main_collection_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: Initialized by Metaplex CPI if needed
+    #[account(mut)]
+    pub main_collection_metadata: UncheckedAccount<'info>,
+
+    /// CHECK: Initialized by Metaplex CPI if needed
+    #[account(mut)]
+    pub main_collection_master_edition: UncheckedAccount<'info>,
+
+    // --- collection accounts for verification ---
     /// CHECK: checked in constraints and CPI
     #[account(
         address = config.collection_mint @ ErrorCode::AddressMismatch,
@@ -84,6 +106,7 @@ pub struct InitializeOption<'info> {
         address = MasterEdition::find_pda(&collection_mint.key()).0 @ ErrorCode::AddressMismatch,
     )]
     pub collection_master_edition: UncheckedAccount<'info>,
+
     // --- option data PDA ---
     #[account(
         init,
@@ -96,7 +119,7 @@ pub struct InitializeOption<'info> {
 
     // programs
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     /// CHECK: address checked
     #[account(address = MPL_TOKEN_METADATA_ID)]
@@ -108,6 +131,45 @@ pub struct InitializeOption<'info> {
 }
 
 impl<'info> InitializeOption<'info> {
+    pub fn process_initialize_option(mut ctx: Context<InitializeOption>) -> Result<()> {
+        // 0. check if the main collection needs to be created by checking against default pubkey
+        // TODO: verify this. i think this will work
+        if ctx.accounts.config.collection_mint == Pubkey::default() {
+            msg!("Config indicates main collection not yet linked. Setting to main_collection_mint PDA.");
+            // set the collection mint in config to the main_collection_mint PDA
+            // the actual Metaplex metadata creation will be handled separately
+            ctx.accounts.config.collection_mint = ctx.accounts.main_collection_mint.key();
+            msg!("Collection mint set in config: {}", ctx.accounts.main_collection_mint.key());
+        } else {
+            // verify consistency if config already has a collection mint
+            if ctx.accounts.config.collection_mint != ctx.accounts.main_collection_mint.key() {
+                msg!("Error: Config collection mint {} does not match derived PDA key {}",
+                    ctx.accounts.config.collection_mint, ctx.accounts.main_collection_mint.key());
+                return err!(ErrorCode::AddressMismatch);
+            }
+            msg!("main collection already linked in config: {}", ctx.accounts.main_collection_mint.key());
+        }
+
+        // call the existing functions to handle the rest of the initialization
+        Self::verify_receipt(&ctx)?;
+        Self::mint_option_to_depositor(&ctx)?;
+        Self::create_option_metadata_account(&ctx)?;
+        Self::verify_mint_with_collection(&ctx)?;
+        Self::set_option_data(&mut ctx)?;
+        Self::increment_config_option_count(&mut ctx)?;
+        Self::increment_total_option_amount(&mut ctx)?;
+        Self::update_deposit_receipt(&mut ctx)?;
+
+        msg!(
+            "option nft initialized and added to collection. mint: {}, amount: {}, expiration: {}",
+            ctx.accounts.option_mint.key(),
+            ctx.accounts.deposit_receipt.amount,
+            ctx.accounts.deposit_receipt.expiration
+        );
+        
+        Ok(())
+    }
+
     pub fn verify_receipt(ctx: &Context<InitializeOption>) -> Result<()> {
         // 1. check if the deposit receipt is valid
         let deposit_receipt = &ctx.accounts.deposit_receipt;
@@ -146,17 +208,30 @@ impl<'info> InitializeOption<'info> {
         )
     }
 
-    pub fn create_option_metadata_account(ctx: &Context<InitializeOption>) -> Result<i64> {
-        let amount = ctx.accounts.deposit_receipt.amount;
-        let expiration = ctx.accounts.deposit_receipt.expiration;
+    pub fn create_option_metadata_account(ctx: &Context<InitializeOption>) -> Result<()> {
+        // don't think these are needed here since we're storing in option data account
+        // and reading from off chain service for metadata via uri field
+        // let amount = ctx.accounts.deposit_receipt.amount;
+        // let expiration = ctx.accounts.deposit_receipt.expiration;
 
-        // format the metadata uri
-        let uri = format!(
-            "https://metadata.zephyr.haus/metadata/{}/{}",
-            amount, expiration
+        // derive the OptionData PDA address for the URI
+        let (option_data_pda_key, _) = Pubkey::find_program_address(
+            &[
+                OptionData::SEED_PREFIX,
+                ctx.accounts.option_mint.key().as_ref()
+            ],
+            ctx.program_id
         );
-        let config_key = ctx.accounts.config.key();
 
+        // format the metadata URI with the OptionData PDA address
+        // the off chain service will parse account data into properly formatted metadata for 
+        // marketplaces / other uses
+        let uri = format!(
+            "https://metadata.zephyr.haus/{}",
+            option_data_pda_key.to_string()
+        );
+        
+        let config_key = ctx.accounts.config.key();
         let config_bump = ctx.accounts.config.bump;
         let bump_seed = [config_bump];
         let config_seeds = Config::get_seeds_with_bump(&bump_seed);
@@ -173,8 +248,8 @@ impl<'info> InitializeOption<'info> {
             .master_edition(Some(&ctx.accounts.option_master_edition.to_account_info()))
             .spl_token_program(Some(&ctx.accounts.token_program.to_account_info()))
             .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
-            .name("zOption".into()) // using the updated name
-            .symbol("zOption".into()) // using the updated symbol
+            .name("zOption".into())
+            .symbol("zOption".into())
             .uri(uri.clone())
             .seller_fee_basis_points(0)
             .creators(vec![Creator {
@@ -185,7 +260,7 @@ impl<'info> InitializeOption<'info> {
             .print_supply(PrintSupply::Zero)
             .invoke_signed(&[&config_seeds[..]])?;
 
-        Ok(expiration)
+        Ok(())
     }
 
     pub fn verify_mint_with_collection(ctx: &Context<InitializeOption>) -> Result<()> {
@@ -217,7 +292,6 @@ impl<'info> InitializeOption<'info> {
         // 4. initialize the option data PDA
         *ctx.accounts.option_data = OptionData {
             mint: ctx.accounts.option_mint.key(),
-            owner: ctx.accounts.depositor.key(),
             amount,
             expiration,
             bump: ctx.bumps.option_data,
@@ -236,6 +310,20 @@ impl<'info> InitializeOption<'info> {
             .ok_or(ErrorCode::Overflow)?;
         Ok(())
     }
+    
+    pub fn increment_total_option_amount(ctx: &mut Context<InitializeOption>) -> Result<()> {
+        // increment the total option amount in the config account
+        let amount = ctx.accounts.deposit_receipt.amount;
+        ctx.accounts.config.total_option_amount = ctx
+            .accounts
+            .config
+            .total_option_amount
+            .checked_add(amount)
+            .ok_or(ErrorCode::Overflow)?;
+            
+        msg!("incremented total_option_amount to {}", ctx.accounts.config.total_option_amount);
+        Ok(())
+    }
 
     pub fn update_deposit_receipt(ctx: &mut Context<InitializeOption>) -> Result<()> {
         // update the deposit receipt to indicate that the NFT has been issued
@@ -250,7 +338,7 @@ impl<'info> InitializeOption<'info> {
 pub enum ErrorCode {
     #[msg("calculation overflow")]
     Overflow,
-    #[msg("address mismatch")] // added
+    #[msg("address mismatch")]
     AddressMismatch,
     #[msg("already issued deposit receipt")]
     DepositReceiptIssued,

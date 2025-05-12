@@ -1,13 +1,14 @@
 use anchor_lang::{prelude::*, system_program};
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_interface::{mint_to, Mint, MintTo, Token2022, TokenAccount},
+    token::Token,
+    token_interface::{mint_to, Mint, MintTo, TokenAccount},
 };
 
 use crate::state::{Config, DepositReceipt, Treasury};
 
 #[derive(Accounts)]
-#[instruction(amount: u64)]
+#[instruction(amount: u64, option_duration: u32)]
 pub struct Deposit<'info> {
     #[account(mut)]
     pub depositor: Signer<'info>,
@@ -22,7 +23,7 @@ pub struct Deposit<'info> {
         payer = depositor,
         associated_token::mint = cn_mint,
         associated_token::authority = depositor,
-        token::token_program = token_program, // specify token program for ATA? or token 2022?
+        token::token_program = token_program, // specify token program for ATA
     )]
     pub depositor_cn_ata: InterfaceAccount<'info, TokenAccount>,
 
@@ -72,9 +73,10 @@ pub struct Deposit<'info> {
     pub protocol_pt_ata: InterfaceAccount<'info, TokenAccount>,
 
     // programs
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 impl<'info> Deposit<'info> {
@@ -128,8 +130,22 @@ impl<'info> Deposit<'info> {
         Ok(tokens_to_mint)
     }
 
-    pub fn set_deposit_receipt(ctx: &mut Context<Deposit>, amount: u64) -> Result<()> {
-        let option_duration = ctx.accounts.config.option_duration;
+    pub fn set_deposit_receipt(ctx: &mut Context<Deposit>, amount: u64, option_duration: u32) -> Result<()> {
+        // Define allowed durations (in seconds)
+        const THREE_MONTHS: u32 = 3 * 30 * 24 * 60 * 60; // 7,776,000 seconds
+        const SIX_MONTHS: u32 = 6 * 30 * 24 * 60 * 60;   // 15,552,000 seconds
+        const TWELVE_MONTHS: u32 = 12 * 30 * 24 * 60 * 60; // 31,104,000 seconds
+        const TWENTY_FOUR_MONTHS: u32 = 24 * 30 * 24 * 60 * 60; // 62,208,000 seconds
+
+        // Validate that option_duration is one of the allowed values
+        require!(
+            option_duration == THREE_MONTHS ||
+            option_duration == SIX_MONTHS ||
+            option_duration == TWELVE_MONTHS ||
+            option_duration == TWENTY_FOUR_MONTHS,
+            DepositError::InvalidOptionDuration
+        );
+        
         let clock = Clock::get()?;
         let current_timestamp = clock.unix_timestamp;
         let expiration = current_timestamp
@@ -213,4 +229,6 @@ pub enum DepositError {
     Overflow,
     #[msg("unclaimed deposit receipt pending.")]
     UnclaimedDepositPending,
+    #[msg("invalid option duration - must be 3, 6, 12, or 24 months")]
+    InvalidOptionDuration,
 }

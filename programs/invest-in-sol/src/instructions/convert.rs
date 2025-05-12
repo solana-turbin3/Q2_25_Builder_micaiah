@@ -1,16 +1,18 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
+    token::Token,
     token_interface::{
-        burn, transfer_checked, Burn, Mint, Token2022, TokenAccount, TransferChecked,
+        burn, transfer_checked, Burn, Mint, TokenAccount, TransferChecked,
     },
     metadata::Metadata as MetaplexMetadataProgram,
 };
-use mpl_token_metadata::instructions::BurnV1CpiBuilder; // using BurnV1 for pNFTs
+use mpl_token_metadata::instructions::BurnV1CpiBuilder; // use BurnV1 for pNFTs
 
 use crate::state::{Config, OptionData}; // assuming treasury state is not needed directly here yet
 
 #[derive(Accounts)]
+#[instruction(amount_to_convert_ui: u64)]
 pub struct Convert<'info> {
     #[account(mut)]
     pub converter: Signer<'info>,
@@ -24,14 +26,14 @@ pub struct Convert<'info> {
 
     #[account(
         mut,
-        associated_token::mint = nft_mint, // the specific NFT being burned
+        associated_token::mint = nft_mint, // NFT being burned
         associated_token::authority = converter,
-        token::token_program = token_program, // specify token program
+        token::token_program = token_program, // using token program, not 2022
     )]
     pub converter_option_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
-        init_if_needed, // initialize user's PT ATA if they don't have one
+        init_if_needed, // init users PT ATA if they don't have one
         payer = converter,
         associated_token::mint = pt_mint,
         associated_token::authority = converter,
@@ -40,8 +42,9 @@ pub struct Convert<'info> {
     pub converter_pt_ata: InterfaceAccount<'info, TokenAccount>,
 
     #[account(
-        seeds = [Config::SEED_PREFIX], // use constant for seed
-        bump = config.bump, // use correct field name
+        mut, // needs mut to decrement option_count
+        seeds = [Config::SEED_PREFIX],
+        bump = config.bump,
     )]
     pub config: Account<'info, Config>,
 
@@ -50,13 +53,13 @@ pub struct Convert<'info> {
         mut,
         associated_token::mint = pt_mint,
         associated_token::authority = config, // owned by config PDA
-        token::token_program = token_program, // specify token program
+        token::token_program = token_program, // use token program, not 2022
     )]
     pub protocol_pt_ata: InterfaceAccount<'info, TokenAccount>,
 
     // mints
     #[account(
-        mut, // still needs mut for burn
+        mut, // needs mut for burn?
         address = config.cn_mint @ ConvertError::AddressMismatch
     )]
     pub cn_mint: InterfaceAccount<'info, Mint>,
@@ -76,9 +79,9 @@ pub struct Convert<'info> {
     // option data PDA (linked to the NFT mint)
     #[account(
         mut,
-        seeds = [OptionData::SEED_PREFIX, nft_mint.key().as_ref()], // use constant for seed
+        seeds = [OptionData::SEED_PREFIX, nft_mint.key().as_ref()],
         bump = option_data.bump,
-        close = converter // close account and return rent to the converter
+        // no 'close = converter' constraint - we handle closure manually in separate instruction
     )]
     pub option_data: Account<'info, OptionData>,
 
@@ -94,7 +97,7 @@ pub struct Convert<'info> {
     pub collection_metadata: UncheckedAccount<'info>, // required for BurnV1
 
     // programs
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
     pub metadata_program: Program<'info, MetaplexMetadataProgram>,
@@ -104,7 +107,7 @@ pub struct Convert<'info> {
 }
 
 impl<'info> Convert<'info> {
-    pub fn handler(ctx: Context<Convert>) -> Result<()> {
+    pub fn handler(mut ctx: Context<Convert>, amount_to_convert_ui: u64) -> Result<()> {
         // check locks first
         require!(!ctx.accounts.config.locked, ConvertError::ProtocolLocked);
         require!(!ctx.accounts.config.convert_locked, ConvertError::ConversionsLocked);
@@ -117,14 +120,14 @@ impl<'info> Convert<'info> {
             ConvertError::OptionExpired
         );
 
-        // get amount from option data
-        let amount_to_process = option_data.amount;
-        require!(amount_to_process > 0, ConvertError::InvalidOptionData); // ensure amount is valid
+        // validate amount_to_convert_ui
+        require!(amount_to_convert_ui > 0, ConvertError::ZeroAmountToConvert);
+        require!(amount_to_convert_ui <= option_data.amount, ConvertError::InsufficientOptionAmount);
 
         msg!(
             "attempting to convert option NFT {} for {} tokens (amount/expiration: {}/{})",
             ctx.accounts.nft_mint.key(),
-            amount_to_process,
+            amount_to_convert_ui,
             option_data.amount,
             option_data.expiration
         );
@@ -139,33 +142,15 @@ impl<'info> Convert<'info> {
             ctx.accounts.token_program.to_account_info(),
             burn_cn_accounts,
         );
-        burn(burn_cn_ctx, amount_to_process)?;
-        msg!("burned {} CN tokens", amount_to_process);
+        burn(burn_cn_ctx, amount_to_convert_ui)?;
+        msg!("burned {} CN tokens", amount_to_convert_ui);
 
         // prepare PDA signer seeds for PT transfer using helper and longer-lived binding
         let bump_seed = [ctx.accounts.config.bump];
         let config_seeds_with_bump = Config::get_seeds_with_bump(&bump_seed);
         let signer_seeds = &[&config_seeds_with_bump[..]];
 
-        // 2. burn the NFT Option using Metaplex BurnV1
-        // pass raw AccountInfo where needed by Metaplex CPI builder
-        BurnV1CpiBuilder::new(&ctx.accounts.metadata_program.to_account_info()) // pass AccountInfo
-            .authority(&ctx.accounts.converter.to_account_info()) // the owner burning the token
-            .collection_metadata(Some(&ctx.accounts.collection_metadata.to_account_info())) // required for pNFT burn
-            .metadata(&ctx.accounts.nft_metadata.to_account_info())
-            .edition(Some(&ctx.accounts.nft_master_edition.to_account_info()))
-            .mint(&ctx.accounts.nft_mint.to_account_info())
-            .token(&ctx.accounts.converter_option_ata.to_account_info()) // the ATA holding the token to burn
-            .spl_token_program(&ctx.accounts.token_program.to_account_info())
-            .invoke() // invoke without signer seeds, converter signs
-            .map_err(|e| {
-                msg!("error burning nft: {:?}", e);
-                ProgramError::from(e) // map metaplex error to program error
-            })?;
-        msg!("burned NFT Option {}", ctx.accounts.nft_mint.key());
-
-
-        // 3. transfer PT tokens from Protocol ATA to converter's ATA
+        // 2. transfer PT tokens from Protocol ATA to converter's ATA
         let transfer_pt_accounts = TransferChecked {
             from: ctx.accounts.protocol_pt_ata.to_account_info(),
             to: ctx.accounts.converter_pt_ata.to_account_info(),
@@ -179,17 +164,103 @@ impl<'info> Convert<'info> {
         );
         transfer_checked(
             transfer_pt_ctx,
-            amount_to_process, // transfer the same amount as CN burned
+            amount_to_convert_ui, // transfer the same amount as CN burned
             ctx.accounts.pt_mint.decimals, // decimals needed for transfer_checked
         )?;
         msg!(
             "transferred {} PT tokens from protocol to converter",
-            amount_to_process
+            amount_to_convert_ui
         );
 
-        // 4. close the OptionData account (handled by `close = converter` constraint)
-        msg!("closed OptionData account {}", ctx.accounts.option_data.key());
+        // 3. handle NFT and OptionData based on conversion type
+        // if amount_to_convert_ui == amount in option_data, we know its full
+        let is_full_conversion = amount_to_convert_ui == ctx.accounts.option_data.amount;
+        
+        if is_full_conversion {
+            msg!("full conversion for NFT {}. Burning NFT.", ctx.accounts.nft_mint.key());
+            
+            // burn the NFT Option using Metaplex BurnV1
+            BurnV1CpiBuilder::new(&ctx.accounts.metadata_program.to_account_info())
+                .authority(&ctx.accounts.converter.to_account_info()) // the owner burning the token
+                .collection_metadata(Some(&ctx.accounts.collection_metadata.to_account_info())) // required for pNFT burn
+                .metadata(&ctx.accounts.nft_metadata.to_account_info())
+                .edition(Some(&ctx.accounts.nft_master_edition.to_account_info()))
+                .mint(&ctx.accounts.nft_mint.to_account_info())
+                .token(&ctx.accounts.converter_option_ata.to_account_info()) // the ATA holding the token to burn
+                .spl_token_program(&ctx.accounts.token_program.to_account_info())
+                .invoke() // invoke without signer seeds, converter signs
+                .map_err(|e| {
+                    msg!("error burning nft: {:?}", e);
+                    ProgramError::from(e) // map metaplex error to program error
+                })?;
+            msg!("burned NFT Option {}", ctx.accounts.nft_mint.key());
+            
+            // set amount to 0 in option data acct to mark as fully spent
+            let option_data = &mut ctx.accounts.option_data;
+            option_data.amount = 0;
+            
+            // decrement the option count and total amount in the config account
+            Self::decrement_config_option_count(&mut ctx)?;
+            Self::decrement_total_option_amount(&mut ctx, amount_to_convert_ui)?;
+            
+            msg!("OptionData for mint {} marked as fully spent (amount = 0). Use close_option_account to reclaim rent.",
+                 ctx.accounts.nft_mint.key());
 
+        } else {
+            // Partial Conversion: Decrement OptionData.amount, don't burn NFT
+            msg!("partial conversion for NFT {}. Decrementing amount.", ctx.accounts.nft_mint.key());
+            let option_data = &mut ctx.accounts.option_data;
+            option_data.amount = option_data.amount
+                .checked_sub(amount_to_convert_ui)
+                .ok_or(ConvertError::ArithmeticOverflow)?;
+                
+            msg!("OptionData amount updated to {} for mint {}.", option_data.amount, ctx.accounts.nft_mint.key());
+            
+            // Decrement the total option amount in the config account
+            Self::decrement_total_option_amount(&mut ctx, amount_to_convert_ui)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn decrement_config_option_count(ctx: &mut Context<Convert>) -> Result<()> {
+        // decrement the option count in the config account
+        // only if it's greater than 0 to prevent underflow
+        if ctx.accounts.config.option_count > 0 {
+            ctx.accounts.config.option_count = ctx
+                .accounts
+                .config
+                .option_count
+                .checked_sub(1)
+                .ok_or(ConvertError::ArithmeticOverflow)?;
+            
+            msg!("decremented config option_count to {}", ctx.accounts.config.option_count);
+        } else {
+            msg!("warning: config option_count is already 0, not decrementing");
+        }
+        
+        Ok(())
+    }
+    
+    pub fn decrement_total_option_amount(ctx: &mut Context<Convert>, amount_to_convert: u64) -> Result<()> {
+        // decrement the total option amount in the config account
+        // verify there's enough to decrement
+        require!(
+            ctx.accounts.config.total_option_amount >= amount_to_convert,
+            ConvertError::InsufficientTotalOptionAmount
+        );
+        
+        // safe to decrement now
+        ctx.accounts.config.total_option_amount = ctx
+            .accounts
+            .config
+            .total_option_amount
+            .checked_sub(amount_to_convert)
+            .ok_or(ConvertError::ArithmeticOverflow)?;
+        
+        msg!("decremented total_option_amount by {} to {}",
+            amount_to_convert, ctx.accounts.config.total_option_amount);
+        
         Ok(())
     }
 }
@@ -208,4 +279,12 @@ pub enum ConvertError {
     ConversionsLocked,
     #[msg("option has expired.")]
     OptionExpired,
+    #[msg("amount to convert must be greater than zero.")]
+    ZeroAmountToConvert,
+    #[msg("amount to convert exceeds remaining amount on the option NFT.")]
+    InsufficientOptionAmount,
+    #[msg("amount to convert exceeds total option amount tracked in config.")]
+    InsufficientTotalOptionAmount,
+    #[msg("arithmetic overflow occurred.")]
+    ArithmeticOverflow,
 }

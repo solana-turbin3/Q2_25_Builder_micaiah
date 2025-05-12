@@ -39,7 +39,7 @@ describe("initialize_option instruction", () => {
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
   const collectionMint = COLLECTION_MINT_ADDRESS;
-  const optionDurationSeconds = 60 * 60 * 24 * 7; // 7 days
+  const optionDurationSeconds = 60 * 60 * 24 * 30; // 7 days
 
   let configPda: PublicKey;
   let treasuryPda: PublicKey;
