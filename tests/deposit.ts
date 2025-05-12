@@ -148,7 +148,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
       "protocol PT ATA balance mismatch"
     );
 
-    // 5. treasury state update
+    // 4. treasury state update
     const finalTreasuryData = await program.account.treasury.fetch(treasuryPda);
     assert.strictEqual(
       finalTreasuryData.totalDepositedSol.toString(),
@@ -156,7 +156,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
       "treasury total_deposited_sol mismatch"
     );
 
-    // 6. removed NFT mint assertion
+    // 5. removed NFT mint assertion
     console.log("state changes verified.");
   });
 
