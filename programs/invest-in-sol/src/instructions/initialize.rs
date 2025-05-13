@@ -1,6 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::Token;
 use anchor_spl::token_interface::Mint;
+use mpl_token_metadata::{
+    instructions::{CreateMasterEditionV3, CreateMetadataAccountV3},
+    types::{Creator, DataV2},
+};
 
 use crate::state::{Config, Treasury};
 
@@ -19,6 +23,12 @@ pub struct Initialize<'info> {
         mint::authority = config // config PDA will be mint authority
     )]
     pub pt_mint: InterfaceAccount<'info, Mint>,
+
+    #[account(
+        mint::token_program = token_program,
+        mint::authority = config // config PDA will be mint authority
+    )]
+    pub collection_mint: InterfaceAccount<'info, Mint>,
 
     // --- PDAs & accounts to initialize ---
     #[account(
@@ -39,17 +49,13 @@ pub struct Initialize<'info> {
     )]
     pub treasury: Account<'info, Treasury>,
 
-    #[account(
-        init,
-        payer = initializer,
-        seeds = [Config::SEED_PREFIX, b"main_collection_mint_v1"],
-        bump,
-        mint::decimals = 0,
-        mint::authority = config,
-        mint::freeze_authority = config,
-        token::token_program = token_program,
-    )]
-    pub main_collection_mint: InterfaceAccount<'info, Mint>,
+    /// CHECK: This account is initialized by the token metadata program
+    #[account(mut)]
+    pub collection_metadata: UncheckedAccount<'info>,
+
+    /// CHECK: This account is initialized by the token metadata program
+    #[account(mut)]
+    pub collection_master_edition: UncheckedAccount<'info>,
 
     // --- programs ---
     pub system_program: Program<'info, System>,
@@ -59,12 +65,13 @@ pub struct Initialize<'info> {
 impl<'info> Initialize<'info> {
     // update handler signature
     pub fn handler(ctx: Context<Initialize>) -> Result<()> {
+
         // initialize config PDA
         let config = &mut ctx.accounts.config;
         config.authority = Some(ctx.accounts.initializer.key());
         config.cn_mint = ctx.accounts.cn_mint.key();
         config.pt_mint = ctx.accounts.pt_mint.key();
-        config.collection_mint = ctx.accounts.main_collection_mint.key();
+        config.collection_mint = ctx.accounts.collection_mint.key();
         config.fee = None; // default to no fee
         config.option_count = 0; // initialize count
         config.total_option_amount = 0; // initialize total option amount
@@ -93,6 +100,90 @@ impl<'info> Initialize<'info> {
         msg!("  Option Count: {}", config.option_count);
         msg!("  Total Option Amount: {}", config.total_option_amount);
         msg!("  authority: {}", config.authority.unwrap());
+
+        Ok(())
+    }
+
+    pub fn create_collection(ctx: &mut Context<Initialize>) -> Result<()> {
+
+        // create metadata with collection details
+        let collection_data = DataV2 {
+            name: "zOption".to_string(),
+            symbol: "zOption".to_string(),
+            uri: "https://metadata.zephyr.haus/collection".to_string(),
+            seller_fee_basis_points: 0,
+            creators: Some(vec![Creator {
+                address: ctx.accounts.config.key(),
+                verified: true,
+                share: 100,
+            }]),
+            collection: None,
+            uses: None,
+        };
+
+        // invoke the create metadata instruction
+        let create_metadata_account_ix = CreateMetadataAccountV3 {
+            metadata: ctx.accounts.collection_metadata.key(),
+            mint: ctx.accounts.collection_mint.key(),
+            mint_authority: ctx.accounts.config.key(),
+            payer: ctx.accounts.config.key(),
+            update_authority: (ctx.accounts.config.key(), true),
+            system_program: ctx.accounts.system_program.key(),
+            rent: None,
+        }
+        .instruction(
+            mpl_token_metadata::instructions::CreateMetadataAccountV3InstructionArgs {
+                data: collection_data,
+                is_mutable: true,
+                collection_details: Some(mpl_token_metadata::types::CollectionDetails::V1 {
+                    size: 0,
+                }),
+            },
+        );
+
+        solana_program::program::invoke_signed(
+            &create_metadata_account_ix,
+            &[
+                ctx.accounts.collection_metadata.to_account_info(),
+                ctx.accounts.collection_mint.to_account_info(),
+                ctx.accounts.config.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            &[],
+        )?;
+
+        // create master edition for the collection NFT
+        let master_edition_ix = CreateMasterEditionV3 {
+            edition: ctx.accounts.collection_master_edition.key(),
+            mint: ctx.accounts.collection_mint.key(),
+            update_authority: ctx.accounts.config.key(),
+            mint_authority: ctx.accounts.config.key(),
+            payer: ctx.accounts.config.key(),
+            metadata: ctx.accounts.collection_metadata.key(),
+            token_program: ctx.accounts.token_program.key(),
+            system_program: ctx.accounts.system_program.key(),
+            rent: None,
+        }
+        .instruction(
+            mpl_token_metadata::instructions::CreateMasterEditionV3InstructionArgs {
+                max_supply: Some(0), // 0 for collection NFTs
+            },
+        );
+
+        solana_program::program::invoke_signed(
+            &master_edition_ix,
+            &[
+                ctx.accounts.collection_master_edition.to_account_info(),
+                ctx.accounts.collection_mint.to_account_info(),
+                ctx.accounts.config.to_account_info(),
+                ctx.accounts.config.to_account_info(),
+                ctx.accounts.config.to_account_info(),
+                ctx.accounts.collection_metadata.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.system_program.to_account_info(),
+            ],
+            &[],
+        )?;
 
         Ok(())
     }
