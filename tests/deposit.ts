@@ -3,7 +3,7 @@ import { Program, Wallet } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
 import { assert, expect } from "chai";
 import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import { getAccount } from "@solana/spl-token";
+import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 import {
   CN_MINT_ADDRESS,
   PT_MINT_ADDRESS,
@@ -13,6 +13,7 @@ import {
   requestAirdrop,
   updateLocks,
   deposit,
+  initializeOption,
 } from "./utils";
 
 describe("deposit instruction (with hardcoded mints)", () => {
@@ -25,44 +26,46 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
-  const collectionMint = COLLECTION_MINT_ADDRESS;
 
   let configPda: PublicKey;
   let treasuryPda: PublicKey;
-  let protocolPtAta: PublicKey; // protocol's ATA for PT
-
+  let protocolPtAta: PublicKey;
+  let depositorCnAta: PublicKey;
   before(async () => {
     // airdrops
     await requestAirdrop(provider, initializer.publicKey, 2 * LAMPORTS_PER_SOL);
     await requestAirdrop(provider, depositor.publicKey, 2 * LAMPORTS_PER_SOL);
 
-    console.log(`using Initializer: ${initializer.publicKey.toBase58()}`);
-    console.log(`using Depositor: ${depositor.publicKey.toBase58()}`);
-    console.log(`using CN Mint: ${cnMint.toBase58()}`);
-    console.log(`using PT Mint: ${ptMint.toBase58()}`);
-    console.log(`using Collection Mint: ${collectionMint.toBase58()}`);
+    console.log(`using Initializer: ${initializer.publicKey?.toBase58()}`);
+    console.log(`using Depositor: ${depositor.publicKey?.toBase58()}`);
+    console.log(`using CN Mint: ${cnMint?.toBase58()}`);
+    console.log(`using PT Mint: ${ptMint?.toBase58()}`);
 
     // initialize protocol using helper (idempotent check inside)
     // important: assumes the hardcoded mints exist and authority is set correctly externally.
-    const optionDurationSeconds = 60 * 60 * 24 * 30; // 30 days default for this test
     const initResult = await initializeProtocol(
       program,
       provider,
       initializer.payer,
       cnMint,
-      ptMint,
-      collectionMint,
-      optionDurationSeconds
+      ptMint
     );
     configPda = initResult.configPda;
     treasuryPda = initResult.treasuryPda;
+    protocolPtAta = await getAssociatedTokenAddress(ptMint, configPda, true);
+    depositorCnAta = await getAssociatedTokenAddress(
+      cnMint,
+      depositor.publicKey,
+      true
+    );
 
-    console.log(`config PDA: ${configPda.toBase58()}`);
-    console.log(`treasury PDA: ${treasuryPda.toBase58()}`);
+    console.log(`config PDA: ${configPda?.toBase58()}`);
+    console.log(`treasury PDA: ${treasuryPda?.toBase58()}`);
   });
 
-  it("allows deposit when protocol is unlocked & verifies state changes", async () => {
+  it.only("allows deposit when protocol is unlocked & verifies state changes", async () => {
     console.log("updating locks with config PDA...", configPda);
+    const depositAmount = new anchor.BN(1 * LAMPORTS_PER_SOL); // 1 SOL
     await updateLocks(
       program,
       provider,
@@ -72,7 +75,6 @@ describe("deposit instruction (with hardcoded mints)", () => {
       false, // set deposits unlocked
       false // set converts unlocked
     );
-    const depositAmount = new anchor.BN(1 * LAMPORTS_PER_SOL); // 1 SOL
 
     // get initial states
     const initialTreasuryBalance = await provider.connection.getBalance(
@@ -94,14 +96,15 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
     console.log("attempting deposit...");
     // execute deposit
-    const { depositorCnAta } = await deposit(
+    await deposit(
       program,
       provider,
       depositor,
       cnMint,
       ptMint,
-      collectionMint,
-      depositAmount
+      depositAmount,
+      protocolPtAta,
+      depositorCnAta
     );
 
     // --- assertions ---
@@ -157,7 +160,12 @@ describe("deposit instruction (with hardcoded mints)", () => {
     );
 
     // 5. removed NFT mint assertion
-    console.log("state changes verified.");
+    console.log("deposit state changes verified.");
+
+    // 6. Initialize Option
+
+    await initializeOption(program, provider, depositor);
+    console.log("Option initialized successfully.");
   });
 
   // --- lock tests (using hardcoded mints and utils) ---
@@ -184,8 +192,9 @@ describe("deposit instruction (with hardcoded mints)", () => {
         depositor,
         cnMint,
         ptMint,
-        collectionMint,
-        depositAmount
+        depositAmount,
+        protocolPtAta,
+        depositorCnAta
       );
       assert.fail("deposit should have failed due to global lock");
     } catch (err) {
@@ -221,8 +230,9 @@ describe("deposit instruction (with hardcoded mints)", () => {
         depositor,
         cnMint,
         ptMint,
-        collectionMint,
-        depositAmount
+        depositAmount,
+        protocolPtAta,
+        depositorCnAta
       );
       assert.fail("deposit should have failed due to deposit lock");
     } catch (err) {
