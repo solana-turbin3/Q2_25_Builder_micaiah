@@ -4,6 +4,7 @@ use anchor_spl::token_interface::Mint;
 use mpl_token_metadata::{
     instructions::{CreateMasterEditionV3, CreateMetadataAccountV3},
     types::{Creator, DataV2},
+    ID as MetadataID,
 };
 
 use crate::state::{Config, Treasury};
@@ -49,12 +50,35 @@ pub struct Initialize<'info> {
     )]
     pub treasury: Account<'info, Treasury>,
 
+    /// CHECK: This is the token metadata program
+    #[account(address = MetadataID)]
+    pub token_metadata_program: UncheckedAccount<'info>,
+
     /// CHECK: This account is initialized by the token metadata program
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [
+            b"metadata",
+            token_metadata_program.key().as_ref(),
+            collection_mint.key().as_ref(),
+        ],
+        bump,
+        seeds::program = token_metadata_program.key()
+    )]
     pub collection_metadata: UncheckedAccount<'info>,
 
     /// CHECK: This account is initialized by the token metadata program
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [
+            b"metadata",
+            token_metadata_program.key().as_ref(),
+            collection_mint.key().as_ref(),
+            b"edition",
+        ],
+        bump,
+        seeds::program = token_metadata_program.key()
+    )]
     pub collection_master_edition: UncheckedAccount<'info>,
 
     // --- programs ---
@@ -105,6 +129,7 @@ impl<'info> Initialize<'info> {
     }
 
     pub fn create_collection(ctx: &mut Context<Initialize>) -> Result<()> {
+
 
         // create metadata with collection details
         let collection_data = DataV2 {
