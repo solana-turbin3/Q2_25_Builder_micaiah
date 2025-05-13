@@ -1,11 +1,10 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_2022::Token2022;
+use anchor_spl::token::Token;
 use anchor_spl::token_interface::Mint;
 
 use crate::state::{Config, Treasury};
 
 #[derive(Accounts)]
-#[instruction(option_duration: u32)] // add instruction argument
 pub struct Initialize<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
@@ -47,12 +46,12 @@ pub struct Initialize<'info> {
 
     // --- programs ---
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token2022>,
+    pub token_program: Program<'info, Token>,
 }
 
 impl<'info> Initialize<'info> {
     // update handler signature
-    pub fn handler(ctx: Context<Initialize>, option_duration: u32) -> Result<()> {
+    pub fn handler(ctx: Context<Initialize>) -> Result<()> {
         // initialize config PDA
         let config = &mut ctx.accounts.config;
         config.authority = Some(ctx.accounts.initializer.key());
@@ -60,8 +59,9 @@ impl<'info> Initialize<'info> {
         config.pt_mint = ctx.accounts.pt_mint.key();
         config.collection_mint = ctx.accounts.collection_mint.key();
         config.fee = None; // default to no fee
-        config.option_duration = option_duration; // set from argument
         config.option_count = 0; // initialize count
+        config.total_option_amount = 0; // initialize total option amount
+        config.deposit_nonce = 0; // initialize deposit nonce
         config.locked = false; // default to unlocked
         config.deposit_locked = true; // default deposit to locked
         config.convert_locked = true; // default convert to locked
@@ -83,7 +83,8 @@ impl<'info> Initialize<'info> {
         msg!("  CN Mint: {}", config.cn_mint);
         msg!("  PT Mint: {}", config.pt_mint);
         msg!("  Collection Mint: {}", config.collection_mint);
-        msg!("  Option Duration: {} seconds", config.option_duration);
+        msg!("  Option Count: {}", config.option_count);
+        msg!("  Total Option Amount: {}", config.total_option_amount);
         msg!("  authority: {}", config.authority.unwrap());
 
         Ok(())

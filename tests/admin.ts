@@ -48,7 +48,7 @@ describe("admin instructions (with hardcoded mints)", () => {
 
     // initialize the protocol using the helper from utils
     // pass initializer.payer as Keypair because it needs to sign
-    const optionDurationSeconds = 60 * 60 * 24 * 7; // default 7 days for admin tests
+    const optionDurationSeconds = 60 * 60 * 24 * 30; // default 7 days for admin tests
     const initResult = await initializeProtocol(
       program,
       provider,

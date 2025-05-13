@@ -4,7 +4,6 @@ use anchor_lang::prelude::*;
 #[derive(InitSpace)]
 pub struct OptionData {
     pub mint: Pubkey, // the mint address of the option NFT
-    pub owner: Pubkey, // the owner who deposited
     pub amount: u64, // the amount of underlying deposited / CN tokens minted
     pub expiration: i64, // unix timestamp of expiration
     pub bump: u8,

@@ -44,7 +44,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
 
     // initialize protocol using helper (idempotent check inside)
     // important: assumes the hardcoded mints exist and authority is set correctly externally.
-    const optionDurationSeconds = 60 * 60 * 24 * 7; // 7 days default for this test
+    const optionDurationSeconds = 60 * 60 * 24 * 30; // 30 days default for this test
     const initResult = await initializeProtocol(
       program,
       provider,
@@ -61,7 +61,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
     console.log(`treasury PDA: ${treasuryPda.toBase58()}`);
   });
 
-  it.only("allows deposit when protocol is unlocked & verifies state changes", async () => {
+  it("allows deposit when protocol is unlocked & verifies state changes", async () => {
     console.log("updating locks with config PDA...", configPda);
     await updateLocks(
       program,
@@ -148,9 +148,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
       "protocol PT ATA balance mismatch"
     );
 
-    // 4. removed OptionData PDA assertion
-
-    // 5. treasury state update
+    // 4. treasury state update
     const finalTreasuryData = await program.account.treasury.fetch(treasuryPda);
     assert.strictEqual(
       finalTreasuryData.totalDepositedSol.toString(),
@@ -158,7 +156,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
       "treasury total_deposited_sol mismatch"
     );
 
-    // 6. removed NFT mint assertion
+    // 5. removed NFT mint assertion
     console.log("state changes verified.");
   });
 

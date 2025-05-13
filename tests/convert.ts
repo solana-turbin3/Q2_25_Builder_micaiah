@@ -9,7 +9,6 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import {
-  getOrCreateAssociatedTokenAccount,
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAccount,
@@ -37,7 +36,7 @@ describe("convert instruction (with hardcoded mints)", () => {
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
   const collectionMint = COLLECTION_MINT_ADDRESS; // still needed for BurnV1 CPI
-  const optionDurationSeconds = 60 * 60 * 24 * 7; // 7 days
+  const optionDurationSeconds = 60 * 60 * 24 * 30; // 7 days
 
   let configPda: PublicKey;
   let treasuryPda: PublicKey;

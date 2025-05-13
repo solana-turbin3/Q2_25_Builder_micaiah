@@ -5,7 +5,7 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
-declare_id!("GwuTyisS2uwa8SNZ7gR298gyLLWioSfrwPEZQeTScfvS");
+declare_id!("3EdJ94TjbyqmZJartpZHHdavKtH5aXQdUS6RyiPzGrmE");
 
 #[program]
 pub mod invest_in_sol {
@@ -14,44 +14,34 @@ pub mod invest_in_sol {
     /// initializes the protocol config, treasury, and treasury vault.
     /// requires pre-existing CN, PT, and collection mints with authority
     /// delegated to the config PDA before calling.
-    pub fn initialize(ctx: Context<Initialize>, option_duration: u32) -> Result<()> {
-        Initialize::handler(ctx, option_duration) // pass argument
+    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
+        Initialize::handler(ctx)
     }
     /// deposits SOL, mints CN tokens to the depositor,
-    /// and mints PT tokens to the protocol treasury. (NFT minting moved)
-    pub fn deposit(mut ctx: Context<Deposit>, amount: u64) -> Result<()> {
+    /// and mints PT tokens to the protocol treasury.
+    /// NFT minting is handled separately in the initialize_option instruction.
+    pub fn deposit(mut ctx: Context<Deposit>, amount: u64, option_duration: u32) -> Result<()> {
         Deposit::assert_protocol_state(&ctx)?;
         Deposit::deposit_sol(&mut ctx, amount)?;
         let tokens_to_mint = Deposit::calculate_tokens_to_mint(&ctx, amount)?;
-        Deposit::set_deposit_receipt(&mut ctx, tokens_to_mint)?;
+        Deposit::set_deposit_receipt(&mut ctx, tokens_to_mint, option_duration)?;
         Deposit::mint_cn_to_depositor(&ctx, tokens_to_mint)?;
         Deposit::mint_pt_to_protocol(&ctx, tokens_to_mint)?;
         Ok(())
     }
     /// initializes the option NFT, metadata, master edition, and OptionData PDA.
     /// this is intended to be called separately before or after deposit.
-    pub fn initialize_option(mut ctx: Context<InitializeOption>) -> Result<()> {
-        InitializeOption::verify_receipt(&ctx)?;
-        InitializeOption::mint_option_to_depositor(&ctx)?;
-        InitializeOption::create_option_metadata_account(&ctx)?;
-        InitializeOption::verify_mint_with_collection(&ctx)?;
-        InitializeOption::set_option_data(&mut ctx)?;
-        InitializeOption::increment_config_option_count(&mut ctx)?;
-        InitializeOption::update_deposit_receipt(&mut ctx)?;
-
-        msg!(
-            "option nft initialized and added to collection. mint: {}, amount: {}, expiration: {}",
-            ctx.accounts.option_mint.key(),
-            ctx.accounts.deposit_receipt.amount,
-            ctx.accounts.deposit_receipt.expiration
-        );
-        Ok(())
+    /// if the main collection doesn't exist, it will be created.
+    pub fn initialize_option(ctx: Context<InitializeOption>) -> Result<()> {
+        // Use the new process_initialize_option function that handles collection creation
+        InitializeOption::process_initialize_option(ctx)
     }
 
-    /// burns user's CN tokens and NFT option, mints PT tokens to the user,
-    /// and closes the OptionData account.
-    pub fn convert(ctx: Context<Convert>) -> Result<()> {
-        Convert::handler(ctx)
+    /// burns user's CN tokens and optionally the NFT option, mints PT tokens to the user.
+    /// If amount_to_convert_ui equals the full amount in OptionData, burns the NFT and sets amount to 0.
+    /// If amount_to_convert_ui is less than the full amount, decrements OptionData.amount and keeps the NFT.
+    pub fn convert(ctx: Context<Convert>, amount_to_convert_ui: u64) -> Result<()> {
+        Convert::handler(ctx, amount_to_convert_ui)
     }
 
     /// updates the protocol locks (global, deposit, convert).
@@ -64,4 +54,25 @@ pub mod invest_in_sol {
     ) -> Result<()> {
         UpdateLocks::handler(ctx, locked, deposit_locked, convert_locked)
     }
+
+    /// closes a fully converted OptionData account and returns the rent to the config authority.
+    /// can only be called when option_data.amount = 0 (fully converted).
+    /// only the Config PDA can authorize this closure.
+    pub fn close_option_account(ctx: Context<CloseOptionAccount>) -> Result<()> {
+        close_option_account::handler(ctx)
+    }
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("calculation overflow")]
+    Overflow,
+    #[msg("address mismatch")]
+    AddressMismatch,
+    #[msg("option not fully converted (amount > 0)")]
+    OptionNotFullyConverted,
+    #[msg("config authority not set")]
+    AuthorityNotSet,
+    #[msg("receiver must be the config authority")]
+    ReceiverAuthorityMismatch,
 }

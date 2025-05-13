@@ -23,7 +23,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
   const collectionMint = COLLECTION_MINT_ADDRESS;
-  const optionDurationSeconds = 60 * 60 * 24 * 7; // 7 days default for this test
+  const optionDurationSeconds = 60 * 60 * 24 * 30; // 7 days default for this test
 
   // PDAs to be derived
   let configPda: PublicKey;
