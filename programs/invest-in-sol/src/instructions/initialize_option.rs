@@ -66,47 +66,22 @@ pub struct InitializeOption<'info> {
     pub option_master_edition: UncheckedAccount<'info>,
 
     // --- main collection accounts ---
-    #[account(
-        init_if_needed,
-        payer = depositor,
-        seeds = [Config::SEED_PREFIX, b"main_collection_mint_v1"],
-        bump,
-        mint::decimals = 0,
-        mint::authority = config,
-        mint::freeze_authority = config,
-        token::token_program = token_program,
-    )]
-    pub main_collection_mint: InterfaceAccount<'info, Mint>,
-
     /// CHECK: Initialized by Metaplex CPI if needed
     #[account(mut)]
-    pub main_collection_metadata: UncheckedAccount<'info>,
-
-    /// CHECK: Initialized by Metaplex CPI if needed
-    #[account(mut)]
-    pub main_collection_master_edition: UncheckedAccount<'info>,
-
-    // --- collection accounts for verification ---
-    /// CHECK: checked in constraints and CPI
-    #[account(
-        mut,
-        address = config.collection_mint @ ErrorCode::AddressMismatch,
-    )]
-    pub collection_mint: UncheckedAccount<'info>, // read-only, just need the key
-
+    pub main_collection_mint: UncheckedAccount<'info>,
     /// CHECK: checked in constraints and CPI
     #[account(
         mut, // verification might change collection metadata account (e.g., size)
-        address = Metadata::find_pda(&collection_mint.key()).0 @ ErrorCode::AddressMismatch,
+        address = Metadata::find_pda(&main_collection_mint.key()).0 @ ErrorCode::AddressMismatch,
     )]
-    pub collection_metadata: UncheckedAccount<'info>,
+    pub main_collection_metadata: UncheckedAccount<'info>,
 
     /// CHECK: checked in constraints and CPI
     #[account(
         mut,
-        address = MasterEdition::find_pda(&collection_mint.key()).0 @ ErrorCode::AddressMismatch,
+        address = MasterEdition::find_pda(&main_collection_mint.key()).0 @ ErrorCode::AddressMismatch,
     )]
-    pub collection_master_edition: UncheckedAccount<'info>,
+    pub main_collection_master_edition: UncheckedAccount<'info>,
 
     // --- option data PDA ---
     #[account(
@@ -133,24 +108,6 @@ pub struct InitializeOption<'info> {
 
 impl<'info> InitializeOption<'info> {
     pub fn process_initialize_option(mut ctx: Context<InitializeOption>) -> Result<()> {
-        // 0. check if the main collection needs to be created by checking against default pubkey
-        // TODO: verify this. i think this will work
-        if ctx.accounts.config.collection_mint == Pubkey::default() {
-            msg!("Config indicates main collection not yet linked. Setting to main_collection_mint PDA.");
-            // set the collection mint in config to the main_collection_mint PDA
-            // the actual Metaplex metadata creation will be handled separately
-            ctx.accounts.config.collection_mint = ctx.accounts.main_collection_mint.key();
-            msg!("Collection mint set in config: {}", ctx.accounts.main_collection_mint.key());
-        } else {
-            // verify consistency if config already has a collection mint
-            if ctx.accounts.config.collection_mint != ctx.accounts.main_collection_mint.key() {
-                msg!("Error: Config collection mint {} does not match derived PDA key {}",
-                    ctx.accounts.config.collection_mint, ctx.accounts.main_collection_mint.key());
-                return err!(ErrorCode::AddressMismatch);
-            }
-            msg!("main collection already linked in config: {}", ctx.accounts.main_collection_mint.key());
-        }
-
         // call the existing functions to handle the rest of the initialization
         Self::verify_receipt(&ctx)?;
         Self::mint_option_to_depositor(&ctx)?;
@@ -167,7 +124,7 @@ impl<'info> InitializeOption<'info> {
             ctx.accounts.deposit_receipt.amount,
             ctx.accounts.deposit_receipt.expiration
         );
-        
+
         Ok(())
     }
 
@@ -219,19 +176,19 @@ impl<'info> InitializeOption<'info> {
         let (option_data_pda_key, _) = Pubkey::find_program_address(
             &[
                 OptionData::SEED_PREFIX,
-                ctx.accounts.option_mint.key().as_ref()
+                ctx.accounts.option_mint.key().as_ref(),
             ],
-            ctx.program_id
+            ctx.program_id,
         );
 
         // format the metadata URI with the OptionData PDA address
-        // the off chain service will parse account data into properly formatted metadata for 
+        // the off chain service will parse account data into properly formatted metadata for
         // marketplaces / other uses
         let uri = format!(
             "https://metadata.zephyr.haus/{}",
             option_data_pda_key.to_string()
         );
-        
+
         let config_key = ctx.accounts.config.key();
         let config_bump = ctx.accounts.config.bump;
         let bump_seed = [config_bump];
@@ -274,11 +231,16 @@ impl<'info> InitializeOption<'info> {
         VerifyCollectionV1CpiBuilder::new(&ctx.accounts.token_metadata_program.to_account_info())
             .metadata(&ctx.accounts.option_metadata_account.to_account_info())
             .authority(&ctx.accounts.config.to_account_info())
-            .collection_mint(&ctx.accounts.collection_mint.to_account_info())
+            .collection_mint(&&ctx.accounts.main_collection_mint.to_account_info())
             .collection_master_edition(Some(
-                &ctx.accounts.collection_master_edition.to_account_info(),
+                &&ctx
+                    .accounts
+                    .main_collection_master_edition
+                    .to_account_info(),
             ))
-            .collection_metadata(Some(&ctx.accounts.collection_mint.to_account_info()))
+            .collection_metadata(Some(
+                &&ctx.accounts.main_collection_metadata.to_account_info(),
+            ))
             .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
             .system_program(&ctx.accounts.system_program.to_account_info())
             .invoke_signed(&[&config_seeds[..]])?;
@@ -311,7 +273,7 @@ impl<'info> InitializeOption<'info> {
             .ok_or(ErrorCode::Overflow)?;
         Ok(())
     }
-    
+
     pub fn increment_total_option_amount(ctx: &mut Context<InitializeOption>) -> Result<()> {
         // increment the total option amount in the config account
         let amount = ctx.accounts.deposit_receipt.amount;
@@ -321,8 +283,11 @@ impl<'info> InitializeOption<'info> {
             .total_option_amount
             .checked_add(amount)
             .ok_or(ErrorCode::Overflow)?;
-            
-        msg!("incremented total_option_amount to {}", ctx.accounts.config.total_option_amount);
+
+        msg!(
+            "incremented total_option_amount to {}",
+            ctx.accounts.config.total_option_amount
+        );
         Ok(())
     }
 

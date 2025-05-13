@@ -19,11 +19,6 @@ pub struct Initialize<'info> {
         mint::authority = config // config PDA will be mint authority
     )]
     pub pt_mint: InterfaceAccount<'info, Mint>,
-    #[account(
-        mint::token_program = token_program,
-        mint::authority = config // config PDA will be mint authority
-    )]
-    pub collection_mint: InterfaceAccount<'info, Mint>,
 
     // --- PDAs & accounts to initialize ---
     #[account(
@@ -44,6 +39,18 @@ pub struct Initialize<'info> {
     )]
     pub treasury: Account<'info, Treasury>,
 
+    #[account(
+        init,
+        payer = initializer,
+        seeds = [Config::SEED_PREFIX, b"main_collection_mint_v1"],
+        bump,
+        mint::decimals = 0,
+        mint::authority = config,
+        mint::freeze_authority = config,
+        token::token_program = token_program,
+    )]
+    pub main_collection_mint: InterfaceAccount<'info, Mint>,
+
     // --- programs ---
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
@@ -57,7 +64,7 @@ impl<'info> Initialize<'info> {
         config.authority = Some(ctx.accounts.initializer.key());
         config.cn_mint = ctx.accounts.cn_mint.key();
         config.pt_mint = ctx.accounts.pt_mint.key();
-        config.collection_mint = ctx.accounts.collection_mint.key();
+        config.collection_mint = ctx.accounts.main_collection_mint.key();
         config.fee = None; // default to no fee
         config.option_count = 0; // initialize count
         config.total_option_amount = 0; // initialize total option amount

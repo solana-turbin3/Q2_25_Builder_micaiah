@@ -22,14 +22,13 @@ describe("initialize instruction (with hardcoded mints)", () => {
 
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
-  const collectionMint = COLLECTION_MINT_ADDRESS;
-  const optionDurationSeconds = 60 * 60 * 24 * 30; // 7 days default for this test
 
   // PDAs to be derived
   let configPda: PublicKey;
   let configBump: number;
   let treasuryPda: PublicKey;
   let treasuryBump: number;
+  let mainCollectionMintPda: PublicKey;
 
   before(async () => {
     // airdrop initializer if needed
@@ -39,7 +38,6 @@ describe("initialize instruction (with hardcoded mints)", () => {
     console.log(`using Initializer: ${initializer.publicKey.toBase58()}`);
     console.log(`using CN Mint: ${cnMint.toBase58()}`);
     console.log(`using PT Mint: ${ptMint.toBase58()}`);
-    console.log(`using Collection Mint: ${collectionMint.toBase58()}`);
 
     // derive PDA addresses
     [configPda, configBump] = PublicKey.findProgramAddressSync(
@@ -48,6 +46,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
     );
     [treasuryPda, treasuryBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("treasury")],
+      program.programId
+    );
+    [mainCollectionMintPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
       program.programId
     );
 
@@ -87,9 +89,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
       provider,
       initializer.payer,
       cnMint,
-      ptMint,
-      collectionMint,
-      optionDurationSeconds
+      ptMint
     );
 
     console.log("initialize instruction successful.");
@@ -103,7 +103,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     assert.ok(configAccount.cnMint.equals(cnMint), "config CN mint mismatch");
     assert.ok(configAccount.ptMint.equals(ptMint), "config PT mint mismatch");
     assert.ok(
-      configAccount.collectionMint.equals(collectionMint),
+      configAccount.collectionMint.equals(mainCollectionMintPda),
       "config Collection mint mismatch"
     );
     assert.isNull(configAccount.fee, "config fee should be None initially");
@@ -157,14 +157,15 @@ describe("initialize instruction (with hardcoded mints)", () => {
 
   it("fails if called again", async () => {
     console.log("testing re-initialization failure...");
+
     try {
       const tx = await program.methods
-        .initialize(optionDurationSeconds)
+        .initialize()
         .accountsStrict({
           initializer: initializer.publicKey,
           cnMint: cnMint,
           ptMint: ptMint,
-          collectionMint: collectionMint,
+          mainCollectionMint: mainCollectionMintPda,
           config: configPda,
           treasury: treasuryPda,
           systemProgram: SystemProgram.programId,
