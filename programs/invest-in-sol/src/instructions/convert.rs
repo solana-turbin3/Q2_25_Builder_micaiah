@@ -87,13 +87,22 @@ pub struct Convert<'info> {
 
     // Metaplex accounts needed for BurnV1
     /// CHECK: checked by Metaplex CPI. PDA derived from nft_mint.
-    #[account(mut)]
+    #[account(
+        mut,
+        address = Metadata::find_pda(&nft_mint.key()).0 @ ConvertError::AddressMismatch,
+    )]
     pub nft_metadata: UncheckedAccount<'info>,
     /// CHECK: checked by Metaplex CPI. PDA derived from nft_mint.
-    #[account(mut)]
+    #[account(
+        mut,
+        address = MasterEdition::find_pda(&nft_mint.key()).0 @ ConvertError::AddressMismatch,
+    )]
     pub nft_master_edition: UncheckedAccount<'info>,
     /// CHECK: checked by Metaplex CPI. PDA derived from collection_mint.
-    #[account(mut)]
+    #[account(
+        mut,
+        address =  Metadata::find_pda(&config.collection_mint.key()).0 @ ConvertError::AddressMismatch,
+    )]
     pub collection_metadata: UncheckedAccount<'info>, // required for BurnV1
 
     // programs
