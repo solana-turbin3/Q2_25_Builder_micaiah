@@ -307,7 +307,7 @@ export async function initializeOption(
   const optionMetadataAccount = findMetadataPda(optionMint);
   const optionMasterEdition = findMasterEditionPda(optionMint);
   const [mainCollectionMint] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
+    [Buffer.from("collection_mint"), configPda.toBuffer()],
     program.programId
   );
   const mainCollectionMetadata = findMetadataPda(mainCollectionMint);
@@ -342,7 +342,11 @@ export async function initializeOption(
     })
     .instruction();
 
-  const tx = new Transaction().add(initializeOptionIx);
+  const tx = new Transaction().add(
+    initializeOptionIx,
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 })
+  );
+
   await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
     depositor,
   ]);
