@@ -180,7 +180,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     console.log("initialized state verified.");
   });
 
-  it.only("fails if called again", async () => {
+  it("fails if called again", async () => {
     console.log("testing re-initialization failure...");
 
     try {
