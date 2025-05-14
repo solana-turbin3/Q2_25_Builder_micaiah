@@ -282,6 +282,8 @@ export async function initializeOption(
   optionMint: PublicKey;
   optionData: PublicKey;
   depositorOptionAta: PublicKey;
+  optionMetadataAccount: PublicKey;
+  optionMasterEdition: PublicKey;
 }> {
   const [depositReceiptPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("deposit_receipt"), depositor.publicKey.toBuffer()],
@@ -354,6 +356,8 @@ export async function initializeOption(
     optionMint,
     optionData,
     depositorOptionAta,
+    optionMetadataAccount,
+    optionMasterEdition,
   };
 }
 
