@@ -122,7 +122,7 @@ describe("convert instruction (with hardcoded mints)", () => {
     console.log("--- Setup Complete ---");
   });
 
-  it.only("allows partial conversion when protocol is unlocked & verifies state changes", async () => {
+  it("allows partial conversion when protocol is unlocked & verifies state changes", async () => {
     // derive user's PT ATA
     const converterPtAta = await anchor.utils.token.associatedAddress({
       mint: ptMint,
