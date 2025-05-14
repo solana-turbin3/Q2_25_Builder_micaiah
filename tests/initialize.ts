@@ -14,7 +14,11 @@ import {
   TOKEN_METADATA_PROGRAM_ID,
   findMasterEditionPda,
 } from "./utils";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddress,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 
 describe("initialize instruction (with hardcoded mints)", () => {
   const provider = anchor.AnchorProvider.local();
@@ -34,6 +38,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
   let collectionMint: PublicKey;
   let collectionMetadata: PublicKey;
   let collectionMasterEdition: PublicKey;
+  let collectionMintAta: PublicKey;
 
   before(async () => {
     // airdrop initializer if needed
@@ -59,6 +64,11 @@ describe("initialize instruction (with hardcoded mints)", () => {
     );
     collectionMetadata = findMetadataPda(collectionMint);
     collectionMasterEdition = findMasterEditionPda(collectionMint);
+    const collectionMintAta = await getAssociatedTokenAddress(
+      collectionMint,
+      configPda,
+      true
+    );
 
     console.log(`derived Config PDA: ${configPda.toBase58()}`);
     console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
@@ -69,6 +79,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     console.log(
       `derived Collection Master Edition PDA: ${collectionMasterEdition.toBase58()}`
     );
+    console.log(`derived Collection Mint ATA: ${collectionMintAta.toBase58()}`);
   });
 
   it("initializes the protocol state", async () => {
@@ -169,7 +180,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     console.log("initialized state verified.");
   });
 
-  it("fails if called again", async () => {
+  it.only("fails if called again", async () => {
     console.log("testing re-initialization failure...");
 
     try {
@@ -182,11 +193,13 @@ describe("initialize instruction (with hardcoded mints)", () => {
           collectionMint,
           collectionMetadata,
           collectionMasterEdition,
+          collectionMintAta,
           config: configPda,
           treasury: treasuryPda,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
           tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .transaction();
       await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [

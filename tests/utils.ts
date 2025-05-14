@@ -2,6 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
 import {
+  ComputeBudgetProgram,
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -92,6 +93,11 @@ export async function initializeProtocol(
   );
   const collectionMetadata = findMetadataPda(collectionMint);
   const collectionMasterEdition = findMasterEditionPda(collectionMint);
+  const collectionMintAta = await getAssociatedTokenAddress(
+    collectionMint,
+    configPda,
+    true
+  );
 
   const configInfo = await provider.connection.getAccountInfo(configPda);
 
@@ -154,12 +160,15 @@ export async function initializeProtocol(
         collectionMetadata: collectionMetadata,
         collectionMasterEdition: collectionMasterEdition,
         config: configPda,
+        collectionMintAta: collectionMintAta,
         treasury: treasuryPda,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
         tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .transaction();
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }));
     await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
       initializer,
     ]);
