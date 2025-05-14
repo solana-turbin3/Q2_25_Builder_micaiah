@@ -206,7 +206,7 @@ impl<'info> Initialize<'info> {
         .system_program(&ctx.accounts.system_program.to_account_info())
         .token_program(&ctx.accounts.token_program.to_account_info())
         // .rent(&ctx.accounts.rent.to_account_info())
-        .max_supply(1) // 1 for master editions NFTs
+        .max_supply(0) // 1 for master editions NFTs
         .invoke_signed(&[&config_seeds[..]])?;
 
         Ok(())
