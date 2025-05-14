@@ -7,7 +7,7 @@ use anchor_spl::{
 use mpl_token_metadata::{
     accounts::{MasterEdition, Metadata},
     instructions::{CreateV1CpiBuilder, VerifyCollectionV1CpiBuilder},
-    types::{Creator, PrintSupply},
+    types::{Collection, Creator, PrintSupply},
     ID as MPL_TOKEN_METADATA_ID,
 };
 
@@ -67,7 +67,10 @@ pub struct InitializeOption<'info> {
 
     // --- main collection accounts ---
     /// CHECK: Initialized by Metaplex CPI if needed
-    #[account(mut)]
+    #[account(
+        mut,
+        address = config.collection_mint @ ErrorCode::AddressMismatch,
+    )]
     pub main_collection_mint: UncheckedAccount<'info>,
     /// CHECK: checked in constraints and CPI
     #[account(
@@ -202,7 +205,6 @@ impl<'info> InitializeOption<'info> {
             .payer(&ctx.accounts.depositor.to_account_info())
             .update_authority(&ctx.accounts.config.to_account_info(), true)
             .system_program(&ctx.accounts.system_program.to_account_info())
-            .payer(&ctx.accounts.depositor.to_account_info())
             .master_edition(Some(&ctx.accounts.option_master_edition.to_account_info()))
             .spl_token_program(Some(&ctx.accounts.token_program.to_account_info()))
             .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
@@ -215,6 +217,10 @@ impl<'info> InitializeOption<'info> {
                 verified: true,
                 share: 100,
             }])
+            .collection(Collection {
+                key: ctx.accounts.main_collection_mint.key(),
+                verified: false,
+            })
             .print_supply(PrintSupply::Zero)
             .invoke_signed(&[&config_seeds[..]])?;
 
@@ -231,15 +237,14 @@ impl<'info> InitializeOption<'info> {
         VerifyCollectionV1CpiBuilder::new(&ctx.accounts.token_metadata_program.to_account_info())
             .metadata(&ctx.accounts.option_metadata_account.to_account_info())
             .authority(&ctx.accounts.config.to_account_info())
-            .collection_mint(&&ctx.accounts.main_collection_mint.to_account_info())
+            .collection_mint(&ctx.accounts.main_collection_mint.to_account_info())
             .collection_master_edition(Some(
-                &&ctx
-                    .accounts
+                &ctx.accounts
                     .main_collection_master_edition
                     .to_account_info(),
             ))
             .collection_metadata(Some(
-                &&ctx.accounts.main_collection_metadata.to_account_info(),
+                &ctx.accounts.main_collection_metadata.to_account_info(),
             ))
             .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
             .system_program(&ctx.accounts.system_program.to_account_info())
