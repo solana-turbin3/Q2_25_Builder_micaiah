@@ -84,8 +84,6 @@ describe("initialize instruction (with hardcoded mints)", () => {
   });
 
   it("initializes the protocol state", async () => {
-    // ensure accounts don't exist yet (this might fail if run after other tests on same localnet instance)
-    // consider resetting the localnet (`anchor localnet --force`) before running tests if needed.
 
     console.log("calling initialize instruction...");
     // call the initialize instruction

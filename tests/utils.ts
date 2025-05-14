@@ -447,9 +447,7 @@ export async function requestAirdrop(
       publicKey,
       lamports
     );
-    // confirmTransaction(provider, signature);
     console.log(`airdrop requested for ${publicKey?.toBase58()}.`);
   } catch (error) {
-    // console.error(`airdrop failed for ${publicKey?.toBase58()}:`, error);
   }
 }
