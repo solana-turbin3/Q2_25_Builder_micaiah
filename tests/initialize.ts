@@ -13,6 +13,7 @@ import {
   findMetadataPda,
   TOKEN_METADATA_PROGRAM_ID,
   findMasterEditionPda,
+  localSendAndConfirmTransaction,
 } from "./utils";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -85,27 +86,6 @@ describe("initialize instruction (with hardcoded mints)", () => {
   it("initializes the protocol state", async () => {
     // ensure accounts don't exist yet (this might fail if run after other tests on same localnet instance)
     // consider resetting the localnet (`anchor localnet --force`) before running tests if needed.
-    const initialConfigInfo = await provider.connection.getAccountInfo(
-      configPda
-    );
-    const initialTreasuryInfo = await provider.connection.getAccountInfo(
-      treasuryPda
-    );
-    const initialVaultInfo = await provider.connection.getAccountInfo(
-      treasuryPda
-    );
-    // these assertions might be too strict if tests are run sequentially without resetting
-    // feel free to nuke
-    assert.isNull(initialConfigInfo, "config PDA should not exist before init");
-    assert.isNull(
-      initialTreasuryInfo,
-      "treasury PDA should not exist before init"
-    );
-    if (initialConfigInfo || initialTreasuryInfo || initialVaultInfo) {
-      console.warn(
-        "warn: accounts already exist before initialization test. state verification might be inaccurate if not the first run."
-      );
-    }
 
     console.log("calling initialize instruction...");
     // call the initialize instruction
@@ -183,6 +163,12 @@ describe("initialize instruction (with hardcoded mints)", () => {
   it("fails if called again", async () => {
     console.log("testing re-initialization failure...");
 
+    const collectionMintAta = await getAssociatedTokenAddress(
+      collectionMint,
+      configPda,
+      true
+    );
+
     try {
       const tx = await program.methods
         .initialize()
@@ -190,10 +176,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
           initializer: initializer.publicKey,
           cnMint: cnMint,
           ptMint: ptMint,
-          collectionMint,
-          collectionMetadata,
-          collectionMasterEdition,
-          collectionMintAta,
+          collectionMint: collectionMint,
+          collectionMetadata: collectionMetadata,
+          collectionMasterEdition: collectionMasterEdition,
+          collectionMintAta: collectionMintAta,
           config: configPda,
           treasury: treasuryPda,
           systemProgram: SystemProgram.programId,
@@ -202,14 +188,14 @@ describe("initialize instruction (with hardcoded mints)", () => {
           associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .transaction();
-      await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [
         initializer.payer,
       ]);
       assert.fail("initialize should fail if called again");
     } catch (err) {
       // expect an error because the accounts (config, treasury, vault) already exist
       // error might be "already in use" or a custom anchor error
-      // console.error("expected error:", err.toString());
+      console.error("expected error:", err.toString());
       expect(err.toString()).to.match(
         /already in use|custom program error: 0x0/i
       ); // match common errors for re-init

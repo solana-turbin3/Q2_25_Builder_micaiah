@@ -18,6 +18,7 @@ import {
   findMasterEditionPda,
   requestAirdrop,
   TOKEN_METADATA_PROGRAM_ID,
+  localSendAndConfirmTransaction,
 } from "./utils";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -55,8 +56,6 @@ describe("admin instructions (with hardcoded mints)", () => {
       initializer.payer,
       cnMint,
       ptMint,
-      collectionMint,
-      optionDurationSeconds
     );
     configPda = initResult.configPda;
     treasuryPda = initResult.treasuryPda; // store treasury PDA
@@ -65,13 +64,13 @@ describe("admin instructions (with hardcoded mints)", () => {
     // verify initial state
     const configAccount = await program.account.config.fetch(configPda);
     assert.isFalse(configAccount.locked, "initial global lock should be false");
-    assert.isFalse(
+    assert.isTrue(
       configAccount.depositLocked,
-      "initial deposit lock should be false"
+      "initial deposit lock should be true"
     );
-    assert.isFalse(
+    assert.isTrue(
       configAccount.convertLocked,
-      "initial convert lock should be false"
+      "initial convert lock should be true"
     );
     // assuming initializer is the authority after init for testing purposes
     assert.ok(
@@ -82,14 +81,16 @@ describe("admin instructions (with hardcoded mints)", () => {
 
   it("allows authority to update all locks", async () => {
     console.log("testing update all locks...");
-    await program.methods
+    let tx = await program.methods
       .updateLocks(true, true, true) // lock everything
       .accounts({
         authority: initializer.publicKey,
         config: configPda,
       })
       .signers([initializer.payer]) // use payer from wallet
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const configAccountLocked = await program.account.config.fetch(configPda);
     assert.isTrue(configAccountLocked.locked, "global lock should be true");

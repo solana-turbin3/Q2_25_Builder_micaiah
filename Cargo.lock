@@ -787,6 +787,7 @@ dependencies = [
  "constant-product-curve",
  "default-boxed",
  "mpl-token-metadata",
+ "solana-program",
 ]
 
 [[package]]

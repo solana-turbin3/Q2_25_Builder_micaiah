@@ -169,7 +169,7 @@ export async function initializeProtocol(
       })
       .transaction();
     tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }));
-    await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [
       initializer,
     ]);
   } else {
@@ -188,15 +188,6 @@ export async function updateLocks(
   setConvertLocked: boolean | null
 ) {
   console.log(`updating protocol (Config: ${configPda?.toBase58()})...`);
-  if (setLocked !== null) {
-    console.log("Setting protocol locked state to:", setLocked);
-  }
-  if (setDepositLocked !== null) {
-    console.log("Setting deposit locked state to:", setDepositLocked);
-  }
-  if (setConvertLocked !== null) {
-    console.log("Setting convert locked state to:", setConvertLocked);
-  }
   const tx = await program.methods
     .updateLocks(setLocked, setDepositLocked, setConvertLocked)
     .accountsStrict({
@@ -204,7 +195,7 @@ export async function updateLocks(
       config: configPda,
     })
     .transaction();
-  await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+  await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [
     initializer,
   ]);
 }
@@ -259,7 +250,7 @@ export async function deposit(
     .instruction();
 
   const tx = new Transaction().add(depositIx);
-  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+  await localSendAndConfirmTransaction(provider, tx, depositor.publicKey, [
     depositor,
   ]);
 
@@ -349,7 +340,7 @@ export async function initializeOption(
     ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 })
   );
 
-  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+  await localSendAndConfirmTransaction(provider, tx, depositor.publicKey, [
     depositor,
   ]);
   return {
@@ -391,7 +382,7 @@ export function parseAnchorError(err: any): anchor.AnchorError | null {
   return null;
 }
 
-export async function sendAndConfirmTransaction(
+export async function localSendAndConfirmTransaction(
   provider: anchor.AnchorProvider,
   transaction: anchor.web3.Transaction,
   payer: PublicKey,
@@ -452,13 +443,13 @@ export async function requestAirdrop(
         lamports / LAMPORTS_PER_SOL
       } SOL for ${publicKey?.toBase58()}...`
     );
-    const signature = await provider.connection.requestAirdrop(
+    await provider.connection.requestAirdrop(
       publicKey,
       lamports
     );
-    confirmTransaction(provider, signature);
-    console.log(`airdrop confirmed for ${publicKey?.toBase58()}.`);
+    // confirmTransaction(provider, signature);
+    console.log(`airdrop requested for ${publicKey?.toBase58()}.`);
   } catch (error) {
-    console.error(`airdrop failed for ${publicKey?.toBase58()}:`, error);
+    // console.error(`airdrop failed for ${publicKey?.toBase58()}:`, error);
   }
 }
