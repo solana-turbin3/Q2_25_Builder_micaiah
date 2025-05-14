@@ -10,6 +10,9 @@ import {
   requestAirdrop,
   sendAndConfirmTransaction,
   initializeProtocol,
+  findMetadataPda,
+  TOKEN_METADATA_PROGRAM_ID,
+  findMasterEditionPda,
 } from "./utils";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 
@@ -28,7 +31,9 @@ describe("initialize instruction (with hardcoded mints)", () => {
   let configBump: number;
   let treasuryPda: PublicKey;
   let treasuryBump: number;
-  let mainCollectionMintPda: PublicKey;
+  let collectionMint: PublicKey;
+  let collectionMetadata: PublicKey;
+  let collectionMasterEdition: PublicKey;
 
   before(async () => {
     // airdrop initializer if needed
@@ -48,13 +53,22 @@ describe("initialize instruction (with hardcoded mints)", () => {
       [Buffer.from("treasury")],
       program.programId
     );
-    [mainCollectionMintPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
+    [collectionMint] = PublicKey.findProgramAddressSync(
+      [Buffer.from("collection_mint"), configPda.toBuffer()],
       program.programId
     );
+    collectionMetadata = findMetadataPda(collectionMint);
+    collectionMasterEdition = findMasterEditionPda(collectionMint);
 
     console.log(`derived Config PDA: ${configPda.toBase58()}`);
     console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
+    console.log(`derived Collection Mint PDA: ${collectionMint.toBase58()}`);
+    console.log(
+      `derived Collection Metadata PDA: ${collectionMetadata.toBase58()}`
+    );
+    console.log(
+      `derived Collection Master Edition PDA: ${collectionMasterEdition.toBase58()}`
+    );
   });
 
   it("initializes the protocol state", async () => {
@@ -103,7 +117,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     assert.ok(configAccount.cnMint.equals(cnMint), "config CN mint mismatch");
     assert.ok(configAccount.ptMint.equals(ptMint), "config PT mint mismatch");
     assert.ok(
-      configAccount.collectionMint.equals(mainCollectionMintPda),
+      configAccount.collectionMint.equals(collectionMint),
       "config Collection mint mismatch"
     );
     assert.isNull(configAccount.fee, "config fee should be None initially");
@@ -165,11 +179,14 @@ describe("initialize instruction (with hardcoded mints)", () => {
           initializer: initializer.publicKey,
           cnMint: cnMint,
           ptMint: ptMint,
-          mainCollectionMint: mainCollectionMintPda,
+          collectionMint,
+          collectionMetadata,
+          collectionMasterEdition,
           config: configPda,
           treasury: treasuryPda,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
+          tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
         })
         .transaction();
       await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [

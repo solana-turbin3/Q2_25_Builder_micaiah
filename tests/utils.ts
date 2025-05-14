@@ -20,10 +20,10 @@ import {
 import { MPL_TOKEN_METADATA_PROGRAM_ID } from "@metaplex-foundation/mpl-token-metadata";
 
 export const CN_MINT_ADDRESS = new PublicKey(
-  "51XGiLFuFYR11MG41vJCjd9Mxcf8sFyHS2BzXkKHXXok"
+  "CTgVYCGAzBvxWGSYRRszXPdLG1hoF7e5k9ENfSrTckUn"
 );
 export const PT_MINT_ADDRESS = new PublicKey(
-  "Fg4mmkJwx1L9Bva4qdMByPF46wwyS4puecuEiJKUxQmS"
+  "6wv3DFcynpbcCaJ2je5cuX67ncpzc6ZS4azSP6LPzKCm"
 );
 // NOTE: the below is the same as the PT mint to get around a non-base58 error and progress through the tests until i create collection on devnet
 export const COLLECTION_MINT_ADDRESS = new PublicKey(
@@ -86,10 +86,12 @@ export async function initializeProtocol(
     program.programId
   );
 
-  const [mainCollectionMintPk] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
+  const [collectionMint] = PublicKey.findProgramAddressSync(
+    [Buffer.from("collection_mint"), configPda.toBuffer()],
     program.programId
   );
+  const collectionMetadata = findMetadataPda(collectionMint);
+  const collectionMasterEdition = findMasterEditionPda(collectionMint);
 
   const configInfo = await provider.connection.getAccountInfo(configPda);
 
@@ -148,11 +150,14 @@ export async function initializeProtocol(
         initializer: initializer.publicKey,
         cnMint: cnMintPk,
         ptMint: ptMintPk,
-        mainCollectionMint: mainCollectionMintPk,
+        collectionMint: collectionMint,
+        collectionMetadata: collectionMetadata,
+        collectionMasterEdition: collectionMasterEdition,
         config: configPda,
         treasury: treasuryPda,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
       })
       .transaction();
     await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [

@@ -26,8 +26,13 @@ pub struct Initialize<'info> {
     pub pt_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
+        init,
+        payer = initializer,
+        seeds = [b"collection_mint", config.key().as_ref()], // use config PDA as seed
+        bump,
         mint::token_program = token_program,
-        mint::authority = config // config PDA will be mint authority
+        mint::authority = config, // config PDA will be mint authority
+        mint::decimals = 6
     )]
     pub collection_mint: InterfaceAccount<'info, Mint>,
 
@@ -89,7 +94,6 @@ pub struct Initialize<'info> {
 impl<'info> Initialize<'info> {
     // update handler signature
     pub fn handler(ctx: Context<Initialize>) -> Result<()> {
-
         // initialize config PDA
         let config = &mut ctx.accounts.config;
         config.authority = Some(ctx.accounts.initializer.key());
@@ -129,8 +133,6 @@ impl<'info> Initialize<'info> {
     }
 
     pub fn create_collection(ctx: &mut Context<Initialize>) -> Result<()> {
-
-
         // create metadata with collection details
         let collection_data = DataV2 {
             name: "zOption".to_string(),
