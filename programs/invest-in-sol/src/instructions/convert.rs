@@ -207,6 +207,8 @@ impl<'info> Convert<'info> {
                 .mint(&ctx.accounts.nft_mint.to_account_info())
                 .token(&ctx.accounts.converter_option_ata.to_account_info()) // the ATA holding the token to burn
                 .spl_token_program(&ctx.accounts.token_program.to_account_info())
+                .system_program(&ctx.accounts.system_program.to_account_info())
+                .sysvar_instructions(&ctx.accounts.sysvar_instructions.to_account_info())
                 .invoke() // invoke without signer seeds, converter signs
                 .map_err(|e| {
                     msg!("error burning nft: {:?}", e);
