@@ -56,6 +56,9 @@ pub struct Take<'info> {
 
     #[account(
         mut,
+        has_one = mint_a,
+        has_one = mint_b,
+        has_one = maker,
         seeds = [b"escrow", escrow.maker.key().as_ref(), seed.to_le_bytes().as_ref()],
         bump = escrow.bump,
         close = maker

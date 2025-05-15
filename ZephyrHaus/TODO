@@ -1,0 +1,29 @@
+# Priorities
+
+Micaiah:
+
+- finish tests for initialize/deposit/convert/admin as we have it
+- See if we can fit initialize_option into deposit, else figure out how to create a secure dependency between the two
+Azoth:
+
+- implement accepting USDC
+- Add passing in NFT address to initialize
+- Add minting NFT in deposit
+- Facilitate interest payments to NFT holders
+
+## Admin stuff
+
+Azoth:
+
+- organize repo
+- take on one-pager + pitch deck
+
+Micaiah:
+
+- take on loom video
+
+Bonus:
+
+- write logic for lending + orca LP
+- Tag-team testing for lending + LP
+- Build frontend
