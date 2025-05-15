@@ -63,7 +63,7 @@ describe("deposit instruction (with hardcoded mints)", () => {
     console.log(`treasury PDA: ${treasuryPda?.toBase58()}`);
   });
 
-  it.only("allows deposit when protocol is unlocked & verifies state changes", async () => {
+  it("allows deposit when protocol is unlocked & verifies state changes", async () => {
     console.log("updating locks with config PDA...", configPda);
     const depositAmount = new anchor.BN(1 * LAMPORTS_PER_SOL); // 1 SOL
     await updateLocks(
@@ -163,7 +163,6 @@ describe("deposit instruction (with hardcoded mints)", () => {
     console.log("deposit state changes verified.");
 
     // 6. Initialize Option
-
     await initializeOption(program, provider, depositor);
     console.log("Option initialized successfully.");
   });

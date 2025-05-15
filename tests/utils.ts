@@ -2,6 +2,7 @@ import * as anchor from "@coral-xyz/anchor";
 import { Program, AnchorProvider } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
 import {
+  ComputeBudgetProgram,
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
@@ -20,10 +21,10 @@ import {
 import { MPL_TOKEN_METADATA_PROGRAM_ID } from "@metaplex-foundation/mpl-token-metadata";
 
 export const CN_MINT_ADDRESS = new PublicKey(
-  "51XGiLFuFYR11MG41vJCjd9Mxcf8sFyHS2BzXkKHXXok"
+  "CTgVYCGAzBvxWGSYRRszXPdLG1hoF7e5k9ENfSrTckUn"
 );
 export const PT_MINT_ADDRESS = new PublicKey(
-  "Fg4mmkJwx1L9Bva4qdMByPF46wwyS4puecuEiJKUxQmS"
+  "6wv3DFcynpbcCaJ2je5cuX67ncpzc6ZS4azSP6LPzKCm"
 );
 // NOTE: the below is the same as the PT mint to get around a non-base58 error and progress through the tests until i create collection on devnet
 export const COLLECTION_MINT_ADDRESS = new PublicKey(
@@ -86,9 +87,16 @@ export async function initializeProtocol(
     program.programId
   );
 
-  const [mainCollectionMintPk] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
+  const [collectionMint] = PublicKey.findProgramAddressSync(
+    [Buffer.from("collection_mint"), configPda.toBuffer()],
     program.programId
+  );
+  const collectionMetadata = findMetadataPda(collectionMint);
+  const collectionMasterEdition = findMasterEditionPda(collectionMint);
+  const collectionMintAta = await getAssociatedTokenAddress(
+    collectionMint,
+    configPda,
+    true
   );
 
   const configInfo = await provider.connection.getAccountInfo(configPda);
@@ -148,14 +156,20 @@ export async function initializeProtocol(
         initializer: initializer.publicKey,
         cnMint: cnMintPk,
         ptMint: ptMintPk,
-        mainCollectionMint: mainCollectionMintPk,
+        collectionMint: collectionMint,
+        collectionMetadata: collectionMetadata,
+        collectionMasterEdition: collectionMasterEdition,
         config: configPda,
+        collectionMintAta: collectionMintAta,
         treasury: treasuryPda,
         systemProgram: SystemProgram.programId,
         tokenProgram: TOKEN_PROGRAM_ID,
+        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .transaction();
-    await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+    tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }));
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [
       initializer,
     ]);
   } else {
@@ -174,15 +188,6 @@ export async function updateLocks(
   setConvertLocked: boolean | null
 ) {
   console.log(`updating protocol (Config: ${configPda?.toBase58()})...`);
-  if (setLocked !== null) {
-    console.log("Setting protocol locked state to:", setLocked);
-  }
-  if (setDepositLocked !== null) {
-    console.log("Setting deposit locked state to:", setDepositLocked);
-  }
-  if (setConvertLocked !== null) {
-    console.log("Setting convert locked state to:", setConvertLocked);
-  }
   const tx = await program.methods
     .updateLocks(setLocked, setDepositLocked, setConvertLocked)
     .accountsStrict({
@@ -190,7 +195,7 @@ export async function updateLocks(
       config: configPda,
     })
     .transaction();
-  await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+  await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [
     initializer,
   ]);
 }
@@ -245,7 +250,7 @@ export async function deposit(
     .instruction();
 
   const tx = new Transaction().add(depositIx);
-  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+  await localSendAndConfirmTransaction(provider, tx, depositor.publicKey, [
     depositor,
   ]);
 
@@ -268,6 +273,8 @@ export async function initializeOption(
   optionMint: PublicKey;
   optionData: PublicKey;
   depositorOptionAta: PublicKey;
+  optionMetadataAccount: PublicKey;
+  optionMasterEdition: PublicKey;
 }> {
   const [depositReceiptPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("deposit_receipt"), depositor.publicKey.toBuffer()],
@@ -293,7 +300,7 @@ export async function initializeOption(
   const optionMetadataAccount = findMetadataPda(optionMint);
   const optionMasterEdition = findMasterEditionPda(optionMint);
   const [mainCollectionMint] = PublicKey.findProgramAddressSync(
-    [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
+    [Buffer.from("collection_mint"), configPda.toBuffer()],
     program.programId
   );
   const mainCollectionMetadata = findMetadataPda(mainCollectionMint);
@@ -328,14 +335,20 @@ export async function initializeOption(
     })
     .instruction();
 
-  const tx = new Transaction().add(initializeOptionIx);
-  await sendAndConfirmTransaction(provider, tx, depositor.publicKey, [
+  const tx = new Transaction().add(
+    initializeOptionIx,
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 })
+  );
+
+  await localSendAndConfirmTransaction(provider, tx, depositor.publicKey, [
     depositor,
   ]);
   return {
     optionMint,
     optionData,
     depositorOptionAta,
+    optionMetadataAccount,
+    optionMasterEdition,
   };
 }
 
@@ -369,7 +382,7 @@ export function parseAnchorError(err: any): anchor.AnchorError | null {
   return null;
 }
 
-export async function sendAndConfirmTransaction(
+export async function localSendAndConfirmTransaction(
   provider: anchor.AnchorProvider,
   transaction: anchor.web3.Transaction,
   payer: PublicKey,
@@ -430,13 +443,11 @@ export async function requestAirdrop(
         lamports / LAMPORTS_PER_SOL
       } SOL for ${publicKey?.toBase58()}...`
     );
-    const signature = await provider.connection.requestAirdrop(
+    await provider.connection.requestAirdrop(
       publicKey,
       lamports
     );
-    confirmTransaction(provider, signature);
-    console.log(`airdrop confirmed for ${publicKey?.toBase58()}.`);
+    console.log(`airdrop requested for ${publicKey?.toBase58()}.`);
   } catch (error) {
-    console.error(`airdrop failed for ${publicKey?.toBase58()}:`, error);
   }
 }

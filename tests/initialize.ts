@@ -10,8 +10,16 @@ import {
   requestAirdrop,
   sendAndConfirmTransaction,
   initializeProtocol,
+  findMetadataPda,
+  TOKEN_METADATA_PROGRAM_ID,
+  findMasterEditionPda,
+  localSendAndConfirmTransaction,
 } from "./utils";
-import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddress,
+  TOKEN_PROGRAM_ID,
+} from "@solana/spl-token";
 
 describe("initialize instruction (with hardcoded mints)", () => {
   const provider = anchor.AnchorProvider.local();
@@ -28,7 +36,10 @@ describe("initialize instruction (with hardcoded mints)", () => {
   let configBump: number;
   let treasuryPda: PublicKey;
   let treasuryBump: number;
-  let mainCollectionMintPda: PublicKey;
+  let collectionMint: PublicKey;
+  let collectionMetadata: PublicKey;
+  let collectionMasterEdition: PublicKey;
+  let collectionMintAta: PublicKey;
 
   before(async () => {
     // airdrop initializer if needed
@@ -48,39 +59,31 @@ describe("initialize instruction (with hardcoded mints)", () => {
       [Buffer.from("treasury")],
       program.programId
     );
-    [mainCollectionMintPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("config"), Buffer.from("main_collection_mint_v1")],
+    [collectionMint] = PublicKey.findProgramAddressSync(
+      [Buffer.from("collection_mint"), configPda.toBuffer()],
       program.programId
+    );
+    collectionMetadata = findMetadataPda(collectionMint);
+    collectionMasterEdition = findMasterEditionPda(collectionMint);
+    const collectionMintAta = await getAssociatedTokenAddress(
+      collectionMint,
+      configPda,
+      true
     );
 
     console.log(`derived Config PDA: ${configPda.toBase58()}`);
     console.log(`derived Treasury PDA: ${treasuryPda.toBase58()}`);
+    console.log(`derived Collection Mint PDA: ${collectionMint.toBase58()}`);
+    console.log(
+      `derived Collection Metadata PDA: ${collectionMetadata.toBase58()}`
+    );
+    console.log(
+      `derived Collection Master Edition PDA: ${collectionMasterEdition.toBase58()}`
+    );
+    console.log(`derived Collection Mint ATA: ${collectionMintAta.toBase58()}`);
   });
 
   it("initializes the protocol state", async () => {
-    // ensure accounts don't exist yet (this might fail if run after other tests on same localnet instance)
-    // consider resetting the localnet (`anchor localnet --force`) before running tests if needed.
-    const initialConfigInfo = await provider.connection.getAccountInfo(
-      configPda
-    );
-    const initialTreasuryInfo = await provider.connection.getAccountInfo(
-      treasuryPda
-    );
-    const initialVaultInfo = await provider.connection.getAccountInfo(
-      treasuryPda
-    );
-    // these assertions might be too strict if tests are run sequentially without resetting
-    // feel free to nuke
-    assert.isNull(initialConfigInfo, "config PDA should not exist before init");
-    assert.isNull(
-      initialTreasuryInfo,
-      "treasury PDA should not exist before init"
-    );
-    if (initialConfigInfo || initialTreasuryInfo || initialVaultInfo) {
-      console.warn(
-        "warn: accounts already exist before initialization test. state verification might be inaccurate if not the first run."
-      );
-    }
 
     console.log("calling initialize instruction...");
     // call the initialize instruction
@@ -103,7 +106,7 @@ describe("initialize instruction (with hardcoded mints)", () => {
     assert.ok(configAccount.cnMint.equals(cnMint), "config CN mint mismatch");
     assert.ok(configAccount.ptMint.equals(ptMint), "config PT mint mismatch");
     assert.ok(
-      configAccount.collectionMint.equals(mainCollectionMintPda),
+      configAccount.collectionMint.equals(collectionMint),
       "config Collection mint mismatch"
     );
     assert.isNull(configAccount.fee, "config fee should be None initially");
@@ -158,6 +161,12 @@ describe("initialize instruction (with hardcoded mints)", () => {
   it("fails if called again", async () => {
     console.log("testing re-initialization failure...");
 
+    const collectionMintAta = await getAssociatedTokenAddress(
+      collectionMint,
+      configPda,
+      true
+    );
+
     try {
       const tx = await program.methods
         .initialize()
@@ -165,21 +174,26 @@ describe("initialize instruction (with hardcoded mints)", () => {
           initializer: initializer.publicKey,
           cnMint: cnMint,
           ptMint: ptMint,
-          mainCollectionMint: mainCollectionMintPda,
+          collectionMint: collectionMint,
+          collectionMetadata: collectionMetadata,
+          collectionMasterEdition: collectionMasterEdition,
+          collectionMintAta: collectionMintAta,
           config: configPda,
           treasury: treasuryPda,
           systemProgram: SystemProgram.programId,
           tokenProgram: TOKEN_PROGRAM_ID,
+          tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
+          associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
         })
         .transaction();
-      await sendAndConfirmTransaction(provider, tx, initializer.publicKey, [
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [
         initializer.payer,
       ]);
       assert.fail("initialize should fail if called again");
     } catch (err) {
       // expect an error because the accounts (config, treasury, vault) already exist
       // error might be "already in use" or a custom anchor error
-      // console.error("expected error:", err.toString());
+      console.error("expected error:", err.toString());
       expect(err.toString()).to.match(
         /already in use|custom program error: 0x0/i
       ); // match common errors for re-init

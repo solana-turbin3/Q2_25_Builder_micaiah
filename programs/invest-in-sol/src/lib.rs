@@ -14,8 +14,8 @@ pub mod invest_in_sol {
     /// initializes the protocol config, treasury, and treasury vault.
     /// requires pre-existing CN, PT, and collection mints with authority
     /// delegated to the config PDA before calling.
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        Initialize::handler(ctx)
+    pub fn initialize(mut ctx: Context<Initialize>) -> Result<()> {
+        Initialize::handler(&mut ctx)
     }
     /// deposits SOL, mints CN tokens to the depositor,
     /// and mints PT tokens to the protocol treasury.

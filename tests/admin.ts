@@ -18,6 +18,7 @@ import {
   findMasterEditionPda,
   requestAirdrop,
   TOKEN_METADATA_PROGRAM_ID,
+  localSendAndConfirmTransaction,
 } from "./utils";
 import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
@@ -40,6 +41,8 @@ describe("admin instructions (with hardcoded mints)", () => {
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
   const collectionMint = COLLECTION_MINT_ADDRESS;
+  
+  const optionDurationSeconds = 60 * 60 * 24 * 30; // default 7 days for admin tests
 
   before(async () => {
     // airdrop initializer and test user
@@ -48,15 +51,12 @@ describe("admin instructions (with hardcoded mints)", () => {
 
     // initialize the protocol using the helper from utils
     // pass initializer.payer as Keypair because it needs to sign
-    const optionDurationSeconds = 60 * 60 * 24 * 30; // default 7 days for admin tests
     const initResult = await initializeProtocol(
       program,
       provider,
       initializer.payer,
       cnMint,
       ptMint,
-      collectionMint,
-      optionDurationSeconds
     );
     configPda = initResult.configPda;
     treasuryPda = initResult.treasuryPda; // store treasury PDA
@@ -65,13 +65,13 @@ describe("admin instructions (with hardcoded mints)", () => {
     // verify initial state
     const configAccount = await program.account.config.fetch(configPda);
     assert.isFalse(configAccount.locked, "initial global lock should be false");
-    assert.isFalse(
+    assert.isTrue(
       configAccount.depositLocked,
-      "initial deposit lock should be false"
+      "initial deposit lock should be true"
     );
-    assert.isFalse(
+    assert.isTrue(
       configAccount.convertLocked,
-      "initial convert lock should be false"
+      "initial convert lock should be true"
     );
     // assuming initializer is the authority after init for testing purposes
     assert.ok(
@@ -82,14 +82,16 @@ describe("admin instructions (with hardcoded mints)", () => {
 
   it("allows authority to update all locks", async () => {
     console.log("testing update all locks...");
-    await program.methods
+    let tx = await program.methods
       .updateLocks(true, true, true) // lock everything
       .accounts({
         authority: initializer.publicKey,
         config: configPda,
       })
       .signers([initializer.payer]) // use payer from wallet
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const configAccountLocked = await program.account.config.fetch(configPda);
     assert.isTrue(configAccountLocked.locked, "global lock should be true");
@@ -103,14 +105,16 @@ describe("admin instructions (with hardcoded mints)", () => {
     );
 
     // unlock everything again
-    await program.methods
+    tx = await program.methods
       .updateLocks(false, false, false)
       .accounts({
         authority: initializer.publicKey,
         config: configPda,
       })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const configAccountUnlocked = await program.account.config.fetch(configPda);
     assert.isFalse(
@@ -130,14 +134,16 @@ describe("admin instructions (with hardcoded mints)", () => {
 
   it("allows authority to update only deposit lock", async () => {
     console.log("testing update deposit lock only...");
-    await program.methods
+    let tx = await program.methods
       .updateLocks(null, true, null) // lock only deposit
       .accounts({
         authority: initializer.publicKey,
         config: configPda,
       })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const configAccount = await program.account.config.fetch(configPda);
     assert.isFalse(configAccount.locked, "global lock should remain false");
@@ -148,24 +154,28 @@ describe("admin instructions (with hardcoded mints)", () => {
     );
 
     // reset
-    await program.methods
+    tx = await program.methods
       .updateLocks(null, false, null)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
     console.log("update deposit lock test finished.");
   });
 
   it("allows authority to update only convert lock", async () => {
     console.log("testing update convert lock only...");
-    await program.methods
+    let tx = await program.methods
       .updateLocks(null, null, true) // lock only convert
       .accounts({
         authority: initializer.publicKey,
         config: configPda,
       })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const configAccount = await program.account.config.fetch(configPda);
     assert.isFalse(configAccount.locked, "global lock should remain false");
@@ -176,24 +186,28 @@ describe("admin instructions (with hardcoded mints)", () => {
     assert.isTrue(configAccount.convertLocked, "convert lock should be true");
 
     // reset
-    await program.methods
+    tx = await program.methods
       .updateLocks(null, null, false)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
     console.log("update convert lock test finished.");
   });
 
   it("allows authority to update only global lock", async () => {
     console.log("testing update global lock only...");
-    await program.methods
+    let tx = await program.methods
       .updateLocks(true, null, null) // lock only global
       .accounts({
         authority: initializer.publicKey,
         config: configPda,
       })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const configAccount = await program.account.config.fetch(configPda);
     assert.isTrue(configAccount.locked, "global lock should be true");
@@ -207,11 +221,13 @@ describe("admin instructions (with hardcoded mints)", () => {
     );
 
     // reset
-    await program.methods
+    tx = await program.methods
       .updateLocks(false, null, null)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
     console.log("update global lock test finished.");
   });
 
@@ -226,14 +242,16 @@ describe("admin instructions (with hardcoded mints)", () => {
     );
 
     try {
-      await program.methods
+      let tx = await program.methods
         .updateLocks(true, true, true)
         .accounts({
           authority: nonAuthority.publicKey, // use wrong authority
           config: configPda,
         })
         .signers([nonAuthority]) // sign with wrong authority
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
       assert.fail("transaction should have failed due to incorrect authority");
     } catch (err) {
       const anchorError = parseAnchorError(err);
@@ -266,17 +284,22 @@ describe("admin instructions (with hardcoded mints)", () => {
   it("prevents deposit when globally locked", async () => {
     console.log("testing global lock prevents deposit...");
     // ensure unlocked first
-    await program.methods
+    let tx = await program.methods
       .updateLocks(false, false, false)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc();
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
+    
     // lock globally
-    await program.methods
+    tx = await program.methods
       .updateLocks(true, null, null)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc();
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     const depositAmount = new anchor.BN(0.1 * LAMPORTS_PER_SOL);
     const nftMint = Keypair.generate();
@@ -333,8 +356,8 @@ describe("admin instructions (with hardcoded mints)", () => {
     );
 
     try {
-      await program.methods
-        .deposit(depositAmount)
+      let tx = await program.methods
+        .deposit(depositAmount, optionDurationSeconds)
         .accounts({
           depositor: testUser.publicKey,
           depositorSolAccount: testUser.publicKey,
@@ -361,7 +384,9 @@ describe("admin instructions (with hardcoded mints)", () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY, // use token_2022_program_id
         })
         .signers([testUser, nftMint])
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
       assert.fail("deposit should have failed due to global lock set by admin");
     } catch (err) {
       const anchorError = parseAnchorError(err);
@@ -377,11 +402,13 @@ describe("admin instructions (with hardcoded mints)", () => {
       );
     } finally {
       // unlock globally for subsequent tests
-      await program.methods
+      let tx = await program.methods
         .updateLocks(false, null, null)
         .accounts({ authority: initializer.publicKey, config: configPda })
         .signers([initializer.payer])
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
       console.log("global lock deposit prevention test finished.");
     }
   });
@@ -389,11 +416,14 @@ describe("admin instructions (with hardcoded mints)", () => {
   it("prevents convert when globally locked", async () => {
     console.log("testing global lock prevents convert...");
     // ensure unlocked first & perform a deposit to get something to convert
-    await program.methods
+    let tx = await program.methods
       .updateLocks(false, false, false)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc();
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
+
     const depositAmount = new anchor.BN(0.2 * LAMPORTS_PER_SOL);
     // --- perform deposit and initialize option to test conversion ---
     const nftMint = Keypair.generate(); // need a new mint for the option
@@ -410,8 +440,8 @@ describe("admin instructions (with hardcoded mints)", () => {
 
     // call deposit
     console.log("performing deposit for convert test setup...");
-    await program.methods
-      .deposit(depositAmount)
+    tx = await program.methods
+      .deposit(depositAmount, optionDurationSeconds)
       .accounts({
         depositor: testUser.publicKey,
         depositorSolAccount: testUser.publicKey,
@@ -427,7 +457,9 @@ describe("admin instructions (with hardcoded mints)", () => {
         rent: anchor.web3.SYSVAR_RENT_PUBKEY,
       })
       .signers([testUser])
-      .rpc({ commitment: "confirmed" });
+      .transaction();
+
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
     console.log("deposit successful for convert test setup.");
 
     // derive accounts for initialize_option
@@ -442,28 +474,6 @@ describe("admin instructions (with hardcoded mints)", () => {
       program.programId
     );
 
-    // call initialize_option
-    console.log("performing initialize_option for convert test setup...");
-    await program.methods
-      .initializeOption(depositAmount) // using same amount as deposit for this test setup
-      .accounts({
-        payer: testUser.publicKey,
-        config: configPda,
-        optionMint: nftMint.publicKey,
-        userOptionAta: userOptionAta,
-        metadataAccount: metadataPda,
-        masterEditionAccount: masterEditionPda,
-        optionData: optionDataPda,
-        tokenProgram: TOKEN_2022_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-        systemProgram: SystemProgram.programId,
-        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
-        tokenMetadataProgram: TOKEN_METADATA_PROGRAM_ID,
-      })
-      .signers([testUser, nftMint])
-      .rpc({ commitment: "confirmed" });
-    console.log("initialize_option successful for convert test setup.");
-
     // store necessary info for the convert call later
     const depositInfo = {
       depositorCnAta: depositorCnAta,
@@ -474,11 +484,12 @@ describe("admin instructions (with hardcoded mints)", () => {
     };
 
     // lock globally
-    await program.methods
+    tx = await program.methods
       .updateLocks(true, null, null)
       .accounts({ authority: initializer.publicKey, config: configPda })
       .signers([initializer.payer])
-      .rpc();
+      .transaction();
+    await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
 
     // derive Metaplex PDAs using depositInfo
     const [nftMetadataPda] = PublicKey.findProgramAddressSync(
@@ -511,8 +522,8 @@ describe("admin instructions (with hardcoded mints)", () => {
       owner: testUser.publicKey,
     });
     try {
-      await program.methods
-        .convert()
+      tx = await program.methods
+        .convert(depositAmount)
         .accounts({
           converter: testUser.publicKey,
           converterCnAta: depositInfo.depositorCnAta,
@@ -535,7 +546,9 @@ describe("admin instructions (with hardcoded mints)", () => {
           rent: anchor.web3.SYSVAR_RENT_PUBKEY, // use token_2022_program_id
         })
         .signers([testUser])
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
       assert.fail("convert should have failed due to global lock set by admin");
     } catch (err) {
       const anchorError = parseAnchorError(err);
@@ -551,11 +564,13 @@ describe("admin instructions (with hardcoded mints)", () => {
       );
     } finally {
       // unlock globally
-      await program.methods
+      tx = await program.methods
         .updateLocks(false, null, null)
         .accounts({ authority: initializer.publicKey, config: configPda })
         .signers([initializer.payer])
-        .rpc({ commitment: "confirmed" });
+        .transaction();
+
+      await localSendAndConfirmTransaction(provider, tx, initializer.publicKey, [initializer.payer])
       console.log("global lock convert prevention test finished.");
     }
   });

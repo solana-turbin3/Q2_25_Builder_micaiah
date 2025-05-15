@@ -1,13 +1,14 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::Token,
-    token_interface::{
-        burn, transfer_checked, Burn, Mint, TokenAccount, TransferChecked,
-    },
     metadata::Metadata as MetaplexMetadataProgram,
+    token::Token,
+    token_interface::{burn, transfer_checked, Burn, Mint, TokenAccount, TransferChecked},
 };
-use mpl_token_metadata::instructions::BurnV1CpiBuilder; // use BurnV1 for pNFTs
+use mpl_token_metadata::{
+    accounts::{MasterEdition, Metadata},
+    instructions::BurnV1CpiBuilder,
+}; // use BurnV1 for pNFTs
 
 use crate::state::{Config, OptionData}; // assuming treasury state is not needed directly here yet
 
@@ -87,13 +88,22 @@ pub struct Convert<'info> {
 
     // Metaplex accounts needed for BurnV1
     /// CHECK: checked by Metaplex CPI. PDA derived from nft_mint.
-    #[account(mut)]
+    #[account(
+        mut,
+        address = Metadata::find_pda(&nft_mint.key()).0 @ ConvertError::AddressMismatch,
+    )]
     pub nft_metadata: UncheckedAccount<'info>,
     /// CHECK: checked by Metaplex CPI. PDA derived from nft_mint.
-    #[account(mut)]
+    #[account(
+        mut,
+        address = MasterEdition::find_pda(&nft_mint.key()).0 @ ConvertError::AddressMismatch,
+    )]
     pub nft_master_edition: UncheckedAccount<'info>,
     /// CHECK: checked by Metaplex CPI. PDA derived from collection_mint.
-    #[account(mut)]
+    #[account(
+        mut,
+        address =  Metadata::find_pda(&config.collection_mint.key()).0 @ ConvertError::AddressMismatch,
+    )]
     pub collection_metadata: UncheckedAccount<'info>, // required for BurnV1
 
     // programs
@@ -110,7 +120,10 @@ impl<'info> Convert<'info> {
     pub fn handler(mut ctx: Context<Convert>, amount_to_convert_ui: u64) -> Result<()> {
         // check locks first
         require!(!ctx.accounts.config.locked, ConvertError::ProtocolLocked);
-        require!(!ctx.accounts.config.convert_locked, ConvertError::ConversionsLocked);
+        require!(
+            !ctx.accounts.config.convert_locked,
+            ConvertError::ConversionsLocked
+        );
 
         // get clock and check expiration
         let clock = Clock::get()?;
@@ -122,7 +135,10 @@ impl<'info> Convert<'info> {
 
         // validate amount_to_convert_ui
         require!(amount_to_convert_ui > 0, ConvertError::ZeroAmountToConvert);
-        require!(amount_to_convert_ui <= option_data.amount, ConvertError::InsufficientOptionAmount);
+        require!(
+            amount_to_convert_ui <= option_data.amount,
+            ConvertError::InsufficientOptionAmount
+        );
 
         msg!(
             "attempting to convert option NFT {} for {} tokens (amount/expiration: {}/{})",
@@ -155,7 +171,7 @@ impl<'info> Convert<'info> {
             from: ctx.accounts.protocol_pt_ata.to_account_info(),
             to: ctx.accounts.converter_pt_ata.to_account_info(),
             authority: ctx.accounts.config.to_account_info(), // Config PDA is the authority over protocol_pt_ata
-            mint: ctx.accounts.pt_mint.to_account_info(), // mint required for transfer_checked
+            mint: ctx.accounts.pt_mint.to_account_info(),     // mint required for transfer_checked
         };
         let transfer_pt_ctx = CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
@@ -175,10 +191,13 @@ impl<'info> Convert<'info> {
         // 3. handle NFT and OptionData based on conversion type
         // if amount_to_convert_ui == amount in option_data, we know its full
         let is_full_conversion = amount_to_convert_ui == ctx.accounts.option_data.amount;
-        
+
         if is_full_conversion {
-            msg!("full conversion for NFT {}. Burning NFT.", ctx.accounts.nft_mint.key());
-            
+            msg!(
+                "full conversion for NFT {}. Burning NFT.",
+                ctx.accounts.nft_mint.key()
+            );
+
             // burn the NFT Option using Metaplex BurnV1
             BurnV1CpiBuilder::new(&ctx.accounts.metadata_program.to_account_info())
                 .authority(&ctx.accounts.converter.to_account_info()) // the owner burning the token
@@ -194,28 +213,35 @@ impl<'info> Convert<'info> {
                     ProgramError::from(e) // map metaplex error to program error
                 })?;
             msg!("burned NFT Option {}", ctx.accounts.nft_mint.key());
-            
+
             // set amount to 0 in option data acct to mark as fully spent
             let option_data = &mut ctx.accounts.option_data;
             option_data.amount = 0;
-            
+
             // decrement the option count and total amount in the config account
             Self::decrement_config_option_count(&mut ctx)?;
             Self::decrement_total_option_amount(&mut ctx, amount_to_convert_ui)?;
-            
+
             msg!("OptionData for mint {} marked as fully spent (amount = 0). Use close_option_account to reclaim rent.",
                  ctx.accounts.nft_mint.key());
-
         } else {
             // Partial Conversion: Decrement OptionData.amount, don't burn NFT
-            msg!("partial conversion for NFT {}. Decrementing amount.", ctx.accounts.nft_mint.key());
+            msg!(
+                "partial conversion for NFT {}. Decrementing amount.",
+                ctx.accounts.nft_mint.key()
+            );
             let option_data = &mut ctx.accounts.option_data;
-            option_data.amount = option_data.amount
+            option_data.amount = option_data
+                .amount
                 .checked_sub(amount_to_convert_ui)
                 .ok_or(ConvertError::ArithmeticOverflow)?;
-                
-            msg!("OptionData amount updated to {} for mint {}.", option_data.amount, ctx.accounts.nft_mint.key());
-            
+
+            msg!(
+                "OptionData amount updated to {} for mint {}.",
+                option_data.amount,
+                ctx.accounts.nft_mint.key()
+            );
+
             // Decrement the total option amount in the config account
             Self::decrement_total_option_amount(&mut ctx, amount_to_convert_ui)?;
         }
@@ -233,23 +259,29 @@ impl<'info> Convert<'info> {
                 .option_count
                 .checked_sub(1)
                 .ok_or(ConvertError::ArithmeticOverflow)?;
-            
-            msg!("decremented config option_count to {}", ctx.accounts.config.option_count);
+
+            msg!(
+                "decremented config option_count to {}",
+                ctx.accounts.config.option_count
+            );
         } else {
             msg!("warning: config option_count is already 0, not decrementing");
         }
-        
+
         Ok(())
     }
-    
-    pub fn decrement_total_option_amount(ctx: &mut Context<Convert>, amount_to_convert: u64) -> Result<()> {
+
+    pub fn decrement_total_option_amount(
+        ctx: &mut Context<Convert>,
+        amount_to_convert: u64,
+    ) -> Result<()> {
         // decrement the total option amount in the config account
         // verify there's enough to decrement
         require!(
             ctx.accounts.config.total_option_amount >= amount_to_convert,
             ConvertError::InsufficientTotalOptionAmount
         );
-        
+
         // safe to decrement now
         ctx.accounts.config.total_option_amount = ctx
             .accounts
@@ -257,10 +289,13 @@ impl<'info> Convert<'info> {
             .total_option_amount
             .checked_sub(amount_to_convert)
             .ok_or(ConvertError::ArithmeticOverflow)?;
-        
-        msg!("decremented total_option_amount by {} to {}",
-            amount_to_convert, ctx.accounts.config.total_option_amount);
-        
+
+        msg!(
+            "decremented total_option_amount by {} to {}",
+            amount_to_convert,
+            ctx.accounts.config.total_option_amount
+        );
+
         Ok(())
     }
 }
