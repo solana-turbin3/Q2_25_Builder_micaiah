@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
-import { Program, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import { Program, Wallet } from "@coral-xyz/anchor";
 import { InvestInSol } from "../target/types/invest_in_sol";
-import { assert, expect } from "chai";
+import { assert } from "chai";
 import {
   Keypair,
   LAMPORTS_PER_SOL,
@@ -12,23 +12,23 @@ import {
   TOKEN_PROGRAM_ID,
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAccount,
-  TOKEN_2022_PROGRAM_ID,
   getAssociatedTokenAddress,
 } from "@solana/spl-token";
 import {
   CN_MINT_ADDRESS,
   PT_MINT_ADDRESS,
   initializeProtocol,
-  parseAnchorError,
   requestAirdrop,
   TOKEN_METADATA_PROGRAM_ID,
   findMetadataPda,
-  findMasterEditionPda,
   deposit,
   initializeOption,
   updateLocks,
   localSendAndConfirmTransaction,
+  debugEnableLogs,
 } from "./utils";
+
+debugEnableLogs();
 
 describe("convert instruction (with hardcoded mints)", () => {
   const provider = anchor.AnchorProvider.env();
@@ -39,7 +39,6 @@ describe("convert instruction (with hardcoded mints)", () => {
 
   const cnMint = CN_MINT_ADDRESS;
   const ptMint = PT_MINT_ADDRESS;
-  const optionDurationSeconds = 60 * 60 * 24 * 30; // 7 days
 
   let configPda: PublicKey;
   let treasuryPda: PublicKey;
@@ -86,7 +85,6 @@ describe("convert instruction (with hardcoded mints)", () => {
       false, // set deposits unlocked
       false // set converts unlocked
     );
-
 
     configPda = initResult.configPda;
     treasuryPda = initResult.treasuryPda;
@@ -201,7 +199,9 @@ describe("convert instruction (with hardcoded mints)", () => {
       .signers([converter]) // only the converter needs to sign
       .transaction();
 
-      await localSendAndConfirmTransaction(provider, tx,converter.publicKey, [converter])
+    await localSendAndConfirmTransaction(provider, tx, converter.publicKey, [
+      converter,
+    ]);
 
     console.log("partial conversion successful");
 
@@ -257,11 +257,10 @@ describe("convert instruction (with hardcoded mints)", () => {
     console.log("partial conversion state changes verified.");
   });
 
-  it("performs full conversion"), async () => { 
+  it("performs full conversion", async () => {
+    let remainingConvertAmount = depositAmount.sub(partialConvertAmount);
 
-    let fullConvertAmount = depositAmount.sub(partialConvertAmount);
-
-        // derive user's PT ATA
+    // derive user's PT ATA
     const converterPtAta = await anchor.utils.token.associatedAddress({
       mint: ptMint,
       owner: converter.publicKey,
@@ -293,7 +292,7 @@ describe("convert instruction (with hardcoded mints)", () => {
     console.log("attempting full conversion...");
     // execute conversion
     const tx = await program.methods
-      .convert(fullConvertAmount)
+      .convert(remainingConvertAmount)
       .accountsStrict({
         converter: converter.publicKey,
         converterCnAta: converterCnAta,
@@ -318,7 +317,9 @@ describe("convert instruction (with hardcoded mints)", () => {
       .signers([converter]) // only the converter needs to sign
       .transaction();
 
-      await localSendAndConfirmTransaction(provider, tx,converter.publicKey, [converter])
+    await localSendAndConfirmTransaction(provider, tx, converter.publicKey, [
+      converter,
+    ]);
 
     console.log("full conversion successful");
 
@@ -331,7 +332,7 @@ describe("convert instruction (with hardcoded mints)", () => {
       converterPtAta
     );
     const expectedPtBalance =
-      initialPtBalance + BigInt(partialConvertAmount.toString());
+      initialPtBalance + BigInt(remainingConvertAmount.toString());
     assert.strictEqual(
       finalPtAccount.amount.toString(),
       expectedPtBalance.toString(),
@@ -344,7 +345,7 @@ describe("convert instruction (with hardcoded mints)", () => {
       converterCnAta
     );
     const expectedCnBalance =
-      initialCnBalance - BigInt(partialConvertAmount.toString());
+      initialCnBalance - BigInt(remainingConvertAmount.toString());
     assert.strictEqual(
       finalCnAccount.amount.toString(),
       expectedCnBalance.toString(),
@@ -364,7 +365,8 @@ describe("convert instruction (with hardcoded mints)", () => {
       protocolPtAta
     );
     const expectedProtocolPtBalance =
-      initialProtocolPtAccount.amount - BigInt(partialConvertAmount.toString());
+      initialProtocolPtAccount.amount -
+      BigInt(remainingConvertAmount.toString());
     assert.strictEqual(
       finalProtocolPtAccount.amount.toString(),
       expectedProtocolPtBalance.toString(),
@@ -372,7 +374,7 @@ describe("convert instruction (with hardcoded mints)", () => {
     );
 
     console.log("state changes verified.");
-  }
+  });
 
   // it("allows conversion when protocol is unlocked & verifies state changes", async () => {
   //   // derive user's PT ATA

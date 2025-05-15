@@ -7,14 +7,16 @@ import { getAccount, getAssociatedTokenAddress } from "@solana/spl-token";
 import {
   CN_MINT_ADDRESS,
   PT_MINT_ADDRESS,
-  COLLECTION_MINT_ADDRESS,
   initializeProtocol,
   parseAnchorError,
   requestAirdrop,
   updateLocks,
   deposit,
   initializeOption,
+  debugEnableLogs,
 } from "./utils";
+
+debugEnableLogs();
 
 describe("deposit instruction (with hardcoded mints)", () => {
   const provider = anchor.AnchorProvider.local();

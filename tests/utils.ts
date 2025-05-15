@@ -21,19 +21,21 @@ import {
 import { MPL_TOKEN_METADATA_PROGRAM_ID } from "@metaplex-foundation/mpl-token-metadata";
 
 export const CN_MINT_ADDRESS = new PublicKey(
-  "CTgVYCGAzBvxWGSYRRszXPdLG1hoF7e5k9ENfSrTckUn"
+  "DZdN2BhHDMSyUGdKqh4VzCs3Gy8WMpr83nsnY6UbtRBj"
 );
 export const PT_MINT_ADDRESS = new PublicKey(
-  "6wv3DFcynpbcCaJ2je5cuX67ncpzc6ZS4azSP6LPzKCm"
-);
-// NOTE: the below is the same as the PT mint to get around a non-base58 error and progress through the tests until i create collection on devnet
-export const COLLECTION_MINT_ADDRESS = new PublicKey(
-  "9p3TMAkB93PHP2j6461BMA8R8S7ob9SNtd3joYLqVDQM"
+  "DyvRdEh4FeFAwe9dsyp66yxF1D4ouL5CSqDHkEqVh4nu"
 );
 
 export const TOKEN_METADATA_PROGRAM_ID = new PublicKey(
   MPL_TOKEN_METADATA_PROGRAM_ID
 ); // ensure it's a PublicKey object
+
+export function debugEnableLogs() {
+  if (process.env.DEBUG !== "true") {
+    console.log = () => {};
+  }
+}
 
 /**
  * finds the metadata PDA for a given mint.
@@ -211,8 +213,6 @@ export async function deposit(
   depositorCnAta: PublicKey
 ): Promise<{
   depositReceiptPda: PublicKey;
-  optionMint?: PublicKey;
-  depositorOptionAta?: PublicKey;
 }> {
   const optionDurationSeconds = 3 * 30 * 24 * 60 * 60; // 3 months default for this test
   const [configPda] = PublicKey.findProgramAddressSync(
@@ -259,9 +259,6 @@ export async function deposit(
   // and return the optionMint and depositorOptionAta
   return {
     depositReceiptPda,
-    // These are placeholders to maintain compatibility with existing tests
-    optionMint: undefined,
-    depositorOptionAta: undefined,
   };
 }
 
@@ -275,6 +272,7 @@ export async function initializeOption(
   depositorOptionAta: PublicKey;
   optionMetadataAccount: PublicKey;
   optionMasterEdition: PublicKey;
+  collectionMint: PublicKey;
 }> {
   const [depositReceiptPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("deposit_receipt"), depositor.publicKey.toBuffer()],
@@ -349,6 +347,7 @@ export async function initializeOption(
     depositorOptionAta,
     optionMetadataAccount,
     optionMasterEdition,
+    collectionMint: mainCollectionMint,
   };
 }
 
@@ -443,11 +442,7 @@ export async function requestAirdrop(
         lamports / LAMPORTS_PER_SOL
       } SOL for ${publicKey?.toBase58()}...`
     );
-    await provider.connection.requestAirdrop(
-      publicKey,
-      lamports
-    );
+    await provider.connection.requestAirdrop(publicKey, lamports);
     console.log(`airdrop requested for ${publicKey?.toBase58()}.`);
-  } catch (error) {
-  }
+  } catch (error) {}
 }
