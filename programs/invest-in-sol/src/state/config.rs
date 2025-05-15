@@ -13,10 +13,12 @@ pub struct Config {
     pub collection_mint: Pubkey,
     /// The optional fee for using the protocol.
     pub fee: Option<u16>,
-    /// Duration in seconds for which an option NFT is valid after minting.
-    pub option_duration: u32,
     /// Counter for naming/tracking options (optional).
     pub option_count: u64,
+    /// Total amount of tokens in all outstanding options.
+    pub total_option_amount: u64,
+    /// Counter for unique deposit receipts.
+    pub deposit_nonce: u64,
     /// Used to lock the protocol in totality.
     pub locked: bool, // Global lock for all user-facing instructions
     /// Lock specifically for the deposit instruction.
